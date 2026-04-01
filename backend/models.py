@@ -24,6 +24,23 @@ def _normalize_database_url(raw_url: str | None) -> str:
     url = (raw_url or DEFAULT_SQLITE_URL).strip()
     if "\n" in url:
         url = url.splitlines()[0].strip()
+    for marker in (
+        "SECRET_KEY=",
+        "FLASK_ENV=",
+        "FLASK_DEBUG=",
+        "FLASK_HOST=",
+        "DB_POOL_SIZE=",
+        "DB_MAX_OVERFLOW=",
+        "DB_POOL_RECYCLE=",
+        "GUNICORN_BIND=",
+        "GUNICORN_WORKERS=",
+        "GUNICORN_THREADS=",
+        "GUNICORN_TIMEOUT=",
+        "GUNICORN_KEEPALIVE=",
+        "GUNICORN_GRACEFUL_TIMEOUT=",
+    ):
+        if marker in url:
+            url = url.split(marker, 1)[0].strip()
     if url.startswith("postgres://"):
         return "postgresql+psycopg://" + url[len("postgres://") :]
     if url.startswith("postgresql://"):
