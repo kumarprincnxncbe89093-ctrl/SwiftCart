@@ -18,7 +18,20 @@ from backend.imported_product_benchmarks import IMPORTED_PRODUCT_MARKET_DATA
 BASE_DIR = Path(__file__).resolve().parent
 DATABASE_PATH = BASE_DIR / "database.db"
 DEFAULT_SQLITE_URL = f"sqlite:///{DATABASE_PATH}"
-DATABASE_URL = os.getenv("DATABASE_URL", DEFAULT_SQLITE_URL)
+
+
+def _normalize_database_url(raw_url: str | None) -> str:
+    url = (raw_url or DEFAULT_SQLITE_URL).strip()
+    if "\n" in url:
+        url = url.splitlines()[0].strip()
+    if url.startswith("postgres://"):
+        return "postgresql+psycopg://" + url[len("postgres://") :]
+    if url.startswith("postgresql://"):
+        return "postgresql+psycopg://" + url[len("postgresql://") :]
+    return url
+
+
+DATABASE_URL = _normalize_database_url(os.getenv("DATABASE_URL"))
 OWNER_EMAIL = "princekumar123pr17@gmail.com"
 OWNER_PASSWORD = "172388Pr@"
 MERCHANT_DEMO_EMAIL = "merchant@swiftcart.com"
