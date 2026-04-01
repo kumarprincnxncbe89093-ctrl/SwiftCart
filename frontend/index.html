@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SwiftCart</title>
+  <link rel="icon" type="image/svg+xml" href="images/swiftcart-favicon.svg">
+  <link rel="stylesheet" href="css/style2.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css">
+</head>
+<body data-page="home">
+  <header>
+    <div class="navbar">
+      <a class="icon" href="index.html">
+        <div class="nav-logo border">
+          <div class="logo"></div>
+        </div>
+      </a>
+      <a class="icon" href="Account_Details.html">
+        <div class="nav-address border">
+          <p class="add-first">Deliver to</p>
+          <div class="add-icon">
+            <i class="fa-solid fa-location-dot"></i>
+            <p class="add-sec">India</p>
+          </div>
+        </div>
+      </a>
+      <div class="nav-search-shell">
+        <form class="nav-search" id="catalogSearchForm" autocomplete="off">
+          <select class="search-select" aria-label="Category">
+            <option>All</option>
+          </select>
+          <input id="catalogSearch" placeholder="Search products, styles, and collections" class="search-input" aria-autocomplete="list" aria-expanded="false" aria-controls="catalogSearchSuggestions">
+          <button id="catalogSearchButton" class="Search-icon" type="submit" aria-label="Search">
+            <i class="fa-solid fa-magnifying-glass"></i>
+          </button>
+        </form>
+        <div id="catalogSearchSuggestions" class="search-suggestions" hidden></div>
+      </div>
+      <a class="icon" href="Account_Details.html">
+        <div class="nav-signin border">
+          <p><span>Hello, <span data-user-name>Sign in</span></span></p>
+          <p class="nav-second">Account & Lists</p>
+        </div>
+      </a>
+      <a class="icon" href="Orders.html">
+        <div class="nav-return border">
+          <p><span>Track</span></p>
+          <p class="nav-second">Orders</p>
+        </div>
+      </a>
+      <a class="icon" href="Cart.html">
+        <div class="nav-cart border">
+          <i class="fa-solid fa-cart-shopping"></i>
+          Cart
+          <span class="cart-count" data-cart-count>0</span>
+        </div>
+      </a>
+      <a class="icon" href="Login.html">
+        <div class="account-user">
+          <i class="fa-regular fa-circle-user"></i>
+        </div>
+      </a>
+    </div>
+    <div class="panel">
+      <div class="panel-all"><i class="fa-solid fa-bars"></i> All</div>
+      <div class="panel-ops">
+        <p>Today&apos;s Deals</p>
+        <p>Customer Service</p>
+        <p>Gift Cards</p>
+        <p>New Arrivals</p>
+      </div>
+      <div class="panel-deals">Fresh ethnic, casual, and accessory picks</div>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero-banner">
+      <div class="hero-copy">
+        <p class="eyebrow">Marketplace Spotlight</p>
+        <h1 id="heroTitle">SwiftCart Marketplace</h1>
+        <p id="heroSubtitle">Discover fashion, footwear, and accessories with richer product data and real checkout flows.</p>
+        <a href="#collection" class="hero-cta">Explore Collection</a>
+      </div>
+      <div class="hero-highlight">
+        <span id="heroHighlight">Daily deals and premium selections updated from the catalog.</span>
+      </div>
+    </section>
+
+    <section class="category-section">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Shop by Category</p>
+          <h2>Browse like a real marketplace</h2>
+        </div>
+        <div class="catalog-actions">
+          <select id="catalogSort" class="ghost-select">
+            <option value="featured">Featured</option>
+            <option value="price_asc">Price: Low to High</option>
+            <option value="price_desc">Price: High to Low</option>
+            <option value="rating">Top Rated</option>
+          </select>
+          <button id="catalogResetButton" class="ghost-button" type="button">Reset</button>
+        </div>
+      </div>
+      <div id="categoryRail" class="category-rail"></div>
+      <div class="filter-panel">
+        <div class="filter-field">
+          <label for="catalogMinPrice">Minimum Price</label>
+          <input id="catalogMinPrice" type="number" placeholder="₹ 499">
+        </div>
+        <div class="filter-field">
+          <label for="catalogMaxPrice">Maximum Price</label>
+          <input id="catalogMaxPrice" type="number" placeholder="₹ 4,999">
+        </div>
+        <label class="filter-check filter-switch">
+          <input id="catalogInStock" type="checkbox">
+          <span>In stock only</span>
+        </label>
+        <div class="filter-actions">
+          <button id="catalogApplyFilters" class="ghost-button" type="button">Apply Filters</button>
+        </div>
+      </div>
+      <div class="filter-chip-panel">
+        <div class="filter-chip-head">
+          <strong>Quick Filters</strong>
+          <span>Apply one tap price and stock filters like a marketplace sidebar</span>
+        </div>
+        <div id="catalogQuickFilters" class="filter-chip-row">
+          <button type="button" class="filter-chip" data-min="" data-max="999">Under ₹999</button>
+          <button type="button" class="filter-chip" data-min="1000" data-max="2999">₹1,000 to ₹2,999</button>
+          <button type="button" class="filter-chip" data-min="3000" data-max="7999">₹3,000 to ₹7,999</button>
+          <button type="button" class="filter-chip" data-min="8000" data-max="">₹8,000+</button>
+          <button type="button" class="filter-chip" data-stock="true">In Stock</button>
+        </div>
+      </div>
+      <p id="catalogMessage" class="status-copy">Showing featured products.</p>
+    </section>
+
+    <section class="section-head">
+      <div>
+        <p class="eyebrow">Research Picks</p>
+        <h2>Curated marketplace collection</h2>
+      </div>
+      <p class="section-copy">Extended catalog selections presented as complete listings with pricing, stock visibility, product pages, wishlist support, and reviews.</p>
+    </section>
+    <section id="researchGrid" class="products-container compact-grid"></section>
+
+    <section class="section-head">
+      <div>
+        <p class="eyebrow">Deal of the Day</p>
+        <h2>Limited-time discounts</h2>
+      </div>
+      <p class="section-copy">High-interest products with stronger discounts, similar to big marketplace promos.</p>
+    </section>
+    <section id="dealGrid" class="products-container compact-grid"></section>
+
+    <section class="section-head" id="collection">
+      <div>
+        <p class="eyebrow">Featured Picks</p>
+        <h2>Find something worth opening</h2>
+      </div>
+      <p class="section-copy">Search instantly across kurtas, shirts, shoes, watches, and premium festive looks.</p>
+    </section>
+
+    <div id="notFound" class="not-found" hidden>
+      <i class="fa-solid fa-magnifying-glass"></i>
+      <h3>No products matched your search</h3>
+      <p>Try a product name like Kurta, Shirt, Watch, or Woodland.</p>
+    </div>
+
+    <section id="productGrid" class="products-container"></section>
+
+    <section class="section-head">
+      <div>
+        <p class="eyebrow">New Arrivals</p>
+        <h2>Fresh additions to the store</h2>
+      </div>
+      <p class="section-copy">Recently added items to keep the storefront feeling current and active.</p>
+    </section>
+    <section id="arrivalGrid" class="products-container compact-grid"></section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-top">
+      <div class="footer-col">
+        <h4>ABOUT</h4>
+        <p>Contact Us</p>
+        <p>About Us</p>
+        <p>Careers</p>
+      </div>
+      <div class="footer-col">
+        <h4>HELP</h4>
+        <p>Payments</p>
+        <p>Shipping</p>
+        <p>Cancellation & Returns</p>
+      </div>
+      <div class="footer-col">
+        <h4>DISCOVER</h4>
+        <p>Ethnic Wear</p>
+        <p>Premium Picks</p>
+        <p>Accessories</p>
+      </div>
+      <div class="footer-col border-left">
+        <h4>Mail Us</h4>
+        <p>SwiftCart Internet Private Limited<br>Bengaluru, Karnataka, India</p>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <div>Become a Seller</div>
+      <div>Gift Cards</div>
+      <div>Help Center</div>
+      <div>© 2026 SwiftCart.com</div>
+    </div>
+  </footer>
+
+  <script src="js/products.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/search.js"></script>
+</body>
+</html>

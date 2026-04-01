@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="swiftcartBag" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#f97316"/>
+    </linearGradient>
+  </defs>
+  <rect x="10" y="18" width="44" height="34" rx="10" fill="url(#swiftcartBag)"/>
+  <path d="M22 24c0-6 4.2-10 10-10s10 4 10 10" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="24" cy="31" r="2.5" fill="#ffffff"/>
+  <circle cx="40" cy="31" r="2.5" fill="#ffffff"/>
+</svg>

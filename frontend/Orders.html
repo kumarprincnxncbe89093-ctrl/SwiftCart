@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Orders - SwiftCart</title>
+    <link rel="icon" type="image/svg+xml" href="images/swiftcart-favicon.svg">
+    <link rel="stylesheet" href="css/style2.css">
+    <link rel="stylesheet" href="css/index.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css">
+</head>
+<body data-page="orders">
+    <header>
+        <div class="navbar">
+            <a class="icon" href="index.html">
+                <div class="nav-logo border"><div class="logo"></div></div>
+            </a>
+            <div class="nav-search compact-search">
+                <input placeholder="Your orders" class="search-input" readonly>
+                <a class="Search-icon" href="index.html"><i class="fa-solid fa-store"></i></a>
+            </div>
+            <a class="icon" href="Account_Details.html">
+                <div class="nav-signin border">
+                    <p><span>Hello, <span data-user-name>Shopper</span></span></p>
+                    <p class="nav-second">Account & Lists</p>
+                </div>
+            </a>
+            <a class="icon" href="Cart.html">
+                <div class="nav-cart border">
+                    <i class="fa-solid fa-cart-shopping"></i>
+                    Cart
+                    <span class="cart-count" data-cart-count>0</span>
+                </div>
+            </a>
+        </div>
+    </header>
+
+    <main class="cart-layout">
+        <section class="cart-panel">
+            <div class="section-head cart-head">
+                <div>
+                    <p class="eyebrow">Order History</p>
+                    <h2>Track purchases and recent checkouts</h2>
+                </div>
+            </div>
+            <div id="ordersList" class="cart-items"></div>
+        </section>
+
+        <aside class="summary-card">
+            <h3>Account Snapshot</h3>
+            <p class="status-copy">Use this page to monitor order status after checkout. Orders are stored in the new SQLite backend.</p>
+            <a class="hero-cta inline-button" href="index.html">Continue Shopping</a>
+        </aside>
+    </main>
+
+    <footer class="footer">
+        <div class="footer-bottom">
+            <div>Track Orders</div>
+            <div>Secure Payments</div>
+            <div>© 2026 SwiftCart.com</div>
+        </div>
+    </footer>
+
+    <script src="js/products.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

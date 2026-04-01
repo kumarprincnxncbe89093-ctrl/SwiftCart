@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SwiftCart Account</title>
+<link rel="icon" type="image/svg+xml" href="images/swiftcart-favicon.svg">
+<link rel="stylesheet" href="css/style2.css">
+<link rel="stylesheet" href="css/Account_Details.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css">
+</head>
+<body data-page="account">
+<header>
+    <div class="navbar">
+        <a class="icon" href="index.html">
+            <div class="nav-logo border"><div class="logo"></div></div>
+        </a>
+        <a class="icon" href="index.html">
+            <div class="nav-address border">
+                <p class="add-first">Deliver to</p>
+                <div class="add-icon">
+                    <i class="fa-solid fa-location-dot"></i>
+                    <p class="add-sec">India</p>
+                </div>
+            </div>
+        </a>
+        <div class="nav-search compact-search">
+            <input placeholder="Your account dashboard" class="search-input" readonly>
+            <a class="Search-icon" href="index.html"><i class="fa-solid fa-store"></i></a>
+        </div>
+        <a class="icon" href="Orders.html">
+            <div class="nav-return border">
+                <p><span>Track</span></p>
+                <p class="nav-second">Orders</p>
+            </div>
+        </a>
+        <a class="icon" href="Cart.html">
+            <div class="nav-cart border">
+                <i class="fa-solid fa-cart-shopping"></i>
+                Cart
+                <span class="cart-count" data-cart-count>0</span>
+            </div>
+        </a>
+    </div>
+</header>
+
+<div class="container">
+  <aside class="sidebar">
+    <div class="profile-box">
+      <div class="profile-box-avatar-wrap">
+        <img data-profile-avatar class="profile-box-avatar" alt="Profile photo">
+      </div>
+      <h3>Hello,</h3>
+      <p><strong data-profile-name>Guest</strong></p>
+      <small data-user-email>Login to your account</small>
+    </div>
+
+    <ul>
+      <li class="active">Profile Information</li>
+      <li><a href="Orders.html">My Orders</a></li>
+      <li><a href="Wishlist.html">Wishlist</a></li>
+      <li><a href="Cart.html">My Cart</a></li>
+      <li><a href="Payment.html">Payments</a></li>
+      <li data-merchant-only hidden><a href="Merchant.html">Merchant Dashboard</a></li>
+      <li data-owner-only hidden><a href="Admin.html">Owner Dashboard</a></li>
+      <li><a href="index.html">Continue Shopping</a></li>
+      <li><button id="logoutButton" class="sidebar-logout" type="button">Logout</button></li>
+    </ul>
+  </aside>
+
+  <main class="content">
+    <section class="card profile-media-card">
+      <div class="card-header">
+        <h2>Profile Photo</h2>
+      </div>
+      <div class="profile-media-layout">
+        <div class="profile-avatar-stage profile-shape-circle" id="profileAvatarStage">
+          <img data-profile-avatar class="profile-avatar-large" alt="Profile photo">
+        </div>
+        <form id="profileImageForm" class="profile-image-form" novalidate>
+          <div class="profile-upload-copy">
+            <p class="profile-upload-title">Create your profile look</p>
+            <p class="status-copy">Upload a clear portrait. It will be saved on the server and shown in the header after login.</p>
+          </div>
+          <label class="profile-file-picker" for="profileImageInput">
+            <span class="profile-file-button">Choose Photo</span>
+            <span id="profileFileName" class="profile-file-name">No file selected</span>
+          </label>
+          <input id="profileImageInput" type="file" name="image" accept="image/png,image/jpeg,image/webp" required hidden>
+          <div class="profile-adjust-grid">
+            <label>
+              <span>Frame Shape</span>
+              <select id="profileShapeSelect">
+                <option value="circle">Circle</option>
+                <option value="rounded">Rounded</option>
+                <option value="square">Square</option>
+              </select>
+            </label>
+            <label>
+              <span>Zoom <strong id="profileZoomValue">100%</strong></span>
+              <input id="profileZoomRange" type="range" min="1" max="1.9" step="0.05" value="1">
+            </label>
+            <label>
+              <span>Face Position <strong id="profileFocusValue">50%</strong></span>
+              <input id="profileFocusRange" type="range" min="20" max="80" step="1" value="50">
+            </label>
+          </div>
+          <div class="profile-photo-actions">
+            <button class="location-btn" type="submit">Upload Photo</button>
+            <button id="removeProfilePhotoButton" class="ghost-button" type="button">Use Default Photo</button>
+          </div>
+          <p id="profileImageStatus" class="status-copy"></p>
+        </form>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-header">
+        <h2>Personal Information</h2>
+      </div>
+      <form id="profileUpdateForm" class="password-change-form" novalidate>
+        <div class="form-row">
+          <label class="field-group">
+            <span>First Name</span>
+            <input type="text" data-profile-first name="first_name">
+          </label>
+          <label class="field-group">
+            <span>Last Name</span>
+            <input type="text" data-profile-last name="last_name">
+          </label>
+        </div>
+        <div class="form-row">
+          <label class="field-group">
+            <span>Unique User Code</span>
+            <input type="text" data-profile-code readonly placeholder="Unique user code">
+            <small class="field-help">This permanent 10-digit identity code is locked and cannot be changed.</small>
+          </label>
+          <label class="field-group">
+            <span>Joined On</span>
+            <input type="text" data-profile-joined readonly placeholder="Joined on">
+            <small class="field-help">The date and time when this SwiftCart account was created.</small>
+          </label>
+        </div>
+        <div class="form-row">
+          <label class="field-group">
+            <span>Last Login</span>
+            <input type="text" data-profile-last-login readonly placeholder="Last login">
+            <small class="field-help">Your latest successful sign-in time.</small>
+          </label>
+          <label class="field-group">
+            <span>Password Updated</span>
+            <input type="text" data-profile-password-updated readonly placeholder="Password updated">
+            <small class="field-help">The most recent time your account password was changed.</small>
+          </label>
+        </div>
+        <div class="form-row">
+          <label class="field-group">
+            <span>Device</span>
+            <input type="text" data-profile-last-device readonly placeholder="Device used for latest login">
+          </label>
+          <label class="field-group">
+            <span>Browser and Platform</span>
+            <input type="text" data-profile-last-browser readonly placeholder="Browser and platform">
+          </label>
+        </div>
+        <div class="form-row">
+          <label class="field-group">
+            <span>Login Method</span>
+            <input type="text" data-profile-last-method readonly placeholder="Password or OTP login">
+          </label>
+          <label class="field-group">
+            <span>Last IP</span>
+            <input type="text" data-profile-last-ip readonly placeholder="Latest sign-in IP">
+          </label>
+        </div>
+        <p id="profileUpdateStatus" class="status-copy">Update your name, email, mobile number, or seller profile details here.</p>
+        <button class="location-btn" type="submit">Save Personal Information</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <div class="card-header">
+        <h2>Email Address</h2>
+      </div>
+      <label class="field-group">
+        <span>Email Address</span>
+        <input type="email" data-profile-email name="email" placeholder="Enter your email address">
+      </label>
+    </section>
+
+    <section class="card">
+      <div class="card-header">
+        <h2>Mobile Number</h2>
+      </div>
+      <label class="field-group">
+        <span>Mobile Number with Country Code</span>
+        <input type="text" data-profile-mobile name="mobile" placeholder="+91 9876543210">
+      </label>
+    </section>
+
+    <section class="card">
+      <div class="card-header">
+        <h2>Account Category</h2>
+      </div>
+      <label class="field-group">
+        <span>Account Type</span>
+        <input type="text" data-profile-role readonly>
+      </label>
+      <label class="field-group">
+        <span>Shop Name</span>
+        <input type="text" data-profile-shop placeholder="Shop name will appear for seller accounts">
+      </label>
+      <label class="field-group">
+        <span>GSTIN</span>
+        <input type="text" data-profile-gstin placeholder="GSTIN will appear for seller accounts">
+      </label>
+      <div class="profile-photo-actions">
+        <button id="profileSaveShortcut" class="location-btn" type="button">Save Updated Details</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-header">
+        <h2>Saved Delivery Addresses</h2>
+      </div>
+      <div class="address-book-grid">
+        <div class="address-book-panel">
+          <div class="saved-addresses-head">
+            <div>
+              <strong>Your saved places</strong>
+              <p class="status-copy">Pick a default address for faster checkout or keep separate home, work, and family locations.</p>
+            </div>
+            <button id="createAddressButton" class="ghost-button inline-button" type="button">Add New Address</button>
+          </div>
+          <div id="savedAddressesList" class="saved-addresses-list"></div>
+        </div>
+        <form id="addressUpdateForm" class="password-change-form address-form-card" novalidate>
+          <input type="hidden" id="addressRecordId" name="address_id">
+          <div class="form-row">
+            <input type="text" id="addressLabel" name="label" placeholder="Address label e.g. Home / Work">
+            <label class="address-default-toggle">
+              <input type="checkbox" id="addressIsDefault" name="is_default">
+              <span>Set as default delivery address</span>
+            </label>
+          </div>
+          <div class="form-row">
+            <input type="text" data-address-city name="city" placeholder="City">
+            <input type="text" data-address-state name="state" placeholder="State">
+          </div>
+          <div class="form-row">
+            <input type="text" data-address-pincode name="pincode" placeholder="Pincode">
+            <input type="text" data-address-landmark name="landmark" placeholder="Landmark">
+          </div>
+          <textarea data-address-street name="street" placeholder="Street address"></textarea>
+          <div class="profile-photo-actions">
+            <button class="location-btn" type="submit">Save Address</button>
+            <button id="addressResetButton" class="ghost-button" type="button">Clear Form</button>
+          </div>
+          <p id="addressStatus" class="status-copy"></p>
+        </form>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-header">
+        <h2>Security</h2>
+      </div>
+      <form id="passwordChangeForm" class="password-change-form" novalidate>
+        <div class="form-row">
+          <input type="password" name="current_password" placeholder="Current password" autocomplete="current-password">
+          <input type="password" name="new_password" placeholder="New password" autocomplete="new-password">
+        </div>
+        <input type="password" name="confirm_password" placeholder="Confirm new password" autocomplete="new-password">
+        <button class="location-btn" type="submit">Change Password</button>
+        <p id="passwordChangeStatus" class="status-copy">Enter your current password first. Password changes are blocked without authentication.</p>
+      </form>
+    </section>
+  </main>
+</div>
+
+<footer class="footer">
+    <div class="footer-bottom">
+        <div>SwiftCart Account</div>
+        <div>Fast support</div>
+        <div>© 2026 SwiftCart.com</div>
+    </div>
+</footer>
+
+<script src="js/products.js"></script>
+<script src="js/app.js"></script>
+
+</body>
+</html>

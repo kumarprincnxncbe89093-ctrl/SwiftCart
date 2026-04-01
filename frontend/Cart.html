@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your Cart - SwiftCart</title>
+  <link rel="icon" type="image/svg+xml" href="images/swiftcart-favicon.svg">
+  <link rel="stylesheet" href="css/style2.css">
+  <link rel="stylesheet" href="css/index.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css">
+</head>
+<body data-page="cart">
+  <header>
+    <div class="navbar">
+      <a class="icon" href="index.html">
+        <div class="nav-logo border"><div class="logo"></div></div>
+      </a>
+      <div class="nav-search compact-search">
+        <input class="search-input" value="Your shopping cart" aria-label="Cart page" readonly>
+        <a class="Search-icon" href="index.html" aria-label="Continue shopping">
+          <i class="fa-solid fa-store"></i>
+        </a>
+      </div>
+      <a class="icon" href="Payment.html">
+        <div class="nav-cart border">
+          <i class="fa-solid fa-credit-card"></i>
+          Checkout
+        </div>
+      </a>
+    </div>
+  </header>
+
+  <main class="cart-layout">
+    <section class="cart-panel">
+      <div class="section-head cart-head">
+        <div>
+          <p class="eyebrow">Your Bag</p>
+          <h2>Review items before checkout</h2>
+        </div>
+      </div>
+      <div id="cartEmpty" class="not-found" hidden>
+        <i class="fa-solid fa-cart-shopping"></i>
+        <h3>Your cart is empty</h3>
+        <p>Add a few products from the catalog to continue.</p>
+        <a href="index.html" class="hero-cta">Continue Shopping</a>
+      </div>
+      <div id="cartItems" class="cart-items"></div>
+      <section class="cart-suggestions">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Suggested for You</p>
+            <h3>Similar and viewed-style products</h3>
+          </div>
+        </div>
+        <div id="cartSuggestions" class="products-container compact-grid"></div>
+      </section>
+    </section>
+
+    <aside class="summary-card">
+      <h3>Order Summary</h3>
+      <div class="summary-row">
+        <span>Subtotal</span>
+        <strong id="cartSubtotal">₹0</strong>
+      </div>
+      <div class="summary-row">
+        <span>Delivery</span>
+        <strong>₹50</strong>
+      </div>
+      <div class="summary-total">
+        <span>Total</span>
+        <strong id="cartTotal">₹0</strong>
+      </div>
+      <a class="buybtn inline-button" href="Payment.html">Proceed to Payment</a>
+    </aside>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-bottom">
+      <div>Easy Returns</div>
+      <div>Fast Checkout</div>
+      <div>© 2026 SwiftCart.com</div>
+    </div>
+  </footer>
+
+  <script src="js/products.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

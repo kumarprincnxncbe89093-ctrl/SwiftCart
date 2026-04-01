@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Merchant Dashboard - SwiftCart</title>
+  <link rel="icon" type="image/svg+xml" href="images/swiftcart-favicon.svg">
+  <link rel="stylesheet" href="css/style2.css">
+  <link rel="stylesheet" href="css/index.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css">
+</head>
+<body data-page="merchant">
+  <header>
+    <div class="navbar">
+      <a class="icon" href="index.html">
+        <div class="nav-logo border"><div class="logo"></div></div>
+      </a>
+      <div class="nav-search compact-search">
+        <input class="search-input" value="SwiftCart merchant dashboard" readonly>
+        <a class="Search-icon" href="index.html"><i class="fa-solid fa-store"></i></a>
+      </div>
+      <a class="icon" href="Account_Details.html">
+        <div class="nav-signin border">
+          <p><span>Merchant</span></p>
+          <p class="nav-second">Listings</p>
+        </div>
+      </a>
+      <button id="merchantLogoutButton" class="ghost-button" type="button">Logout</button>
+    </div>
+  </header>
+
+  <main class="admin-layout">
+    <section class="admin-overview">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Merchant</p>
+          <h2>Your products and listing controls</h2>
+        </div>
+      </div>
+      <div id="merchantStats" class="admin-stats"></div>
+      <div id="merchantIdentity" class="owner-identity"></div>
+      <p id="merchantStatus" class="status-copy"></p>
+    </section>
+
+    <section class="admin-form-card">
+      <h3>Add or update your product</h3>
+      <form id="merchantProductForm" class="admin-form">
+        <input type="hidden" id="merchantProductId" name="product_id">
+        <input type="text" name="name" placeholder="Product name" required>
+        <input type="text" name="slug" placeholder="slug-name" required>
+        <select name="category_id" id="merchantCategorySelect" required></select>
+        <input type="text" name="image" placeholder="images/your-image.jpg" required>
+        <div class="grid-two">
+          <input type="number" step="0.01" name="price" placeholder="Price" required>
+          <input type="number" step="0.01" name="original_price" placeholder="Original price" required>
+        </div>
+        <div class="grid-two">
+          <input type="number" name="stock" placeholder="Stock" required>
+          <input type="text" name="tag" placeholder="Tag">
+        </div>
+        <textarea name="description" placeholder="Description"></textarea>
+        <textarea name="highlights" placeholder="Highlights separated by |"></textarea>
+        <textarea name="specifications" placeholder="Specifications like Fabric=Cotton|Fit=Regular"></textarea>
+        <div class="grid-two">
+          <label><input type="checkbox" name="featured"> Featured</label>
+          <label><input type="checkbox" name="deal_of_the_day"> Deal of the day</label>
+        </div>
+        <button class="btn inline-button" type="submit">Save Listing</button>
+      </form>
+    </section>
+
+    <section class="admin-table-card">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">My Listings</p>
+          <h2>Products listed by your merchant account</h2>
+        </div>
+      </div>
+      <div id="merchantProductTable" class="admin-product-table"></div>
+    </section>
+  </main>
+
+  <footer class="footer"></footer>
+
+  <script src="js/products.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

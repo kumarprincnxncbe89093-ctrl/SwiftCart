@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wishlist - SwiftCart</title>
+  <link rel="icon" type="image/svg+xml" href="images/swiftcart-favicon.svg">
+  <link rel="stylesheet" href="css/style2.css">
+  <link rel="stylesheet" href="css/index.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css">
+</head>
+<body data-page="wishlist">
+  <header>
+    <div class="navbar">
+      <a class="icon" href="index.html">
+        <div class="nav-logo border"><div class="logo"></div></div>
+      </a>
+      <div class="nav-search compact-search">
+        <input class="search-input" value="Your wishlist" readonly>
+        <a class="Search-icon" href="index.html"><i class="fa-solid fa-store"></i></a>
+      </div>
+      <a class="icon" href="Account_Details.html">
+        <div class="nav-signin border">
+          <p><span>Hello, <span data-user-name>Sign in</span></span></p>
+          <p class="nav-second">Account & Lists</p>
+        </div>
+      </a>
+    </div>
+  </header>
+
+  <main class="cart-layout">
+    <section class="cart-panel">
+      <div class="section-head cart-head">
+        <div>
+          <p class="eyebrow">Wishlist</p>
+          <h2>Saved products for later</h2>
+        </div>
+      </div>
+      <div id="wishlistList" class="cart-items"></div>
+      <p id="wishlistStatus" class="status-copy"></p>
+    </section>
+
+    <aside class="summary-card">
+      <h3>Shopping Shortcuts</h3>
+      <p class="status-copy">Move back to the catalog, compare items, or open any product page directly from your wishlist.</p>
+      <a class="hero-cta inline-button" href="index.html">Continue Shopping</a>
+    </aside>
+  </main>
+
+  <footer class="footer"></footer>
+
+  <script src="js/products.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

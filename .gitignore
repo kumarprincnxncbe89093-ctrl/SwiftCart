@@ -1,0 +1,7 @@
+.env
+__pycache__/
+*.pyc
+backend/database.db
+backend/database.db-shm
+backend/database.db-wal
+frontend/uploads/profiles/

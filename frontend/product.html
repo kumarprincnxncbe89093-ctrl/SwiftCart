@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Product - SwiftCart</title>
+  <link rel="icon" type="image/svg+xml" href="images/swiftcart-favicon.svg">
+  <link rel="stylesheet" href="css/style2.css">
+  <link rel="stylesheet" href="css/index.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css">
+</head>
+<body data-page="product">
+  <header>
+    <div class="navbar">
+      <a class="icon" href="index.html">
+        <div class="nav-logo border"><div class="logo"></div></div>
+      </a>
+      <div class="nav-search compact-search">
+        <input class="search-input" value="Product details" aria-label="Current page" readonly>
+        <a class="Search-icon" href="index.html" aria-label="Back to catalog">
+          <i class="fa-solid fa-arrow-left"></i>
+        </a>
+      </div>
+      <a class="icon" href="Cart.html">
+        <div class="nav-cart border">
+          <i class="fa-solid fa-cart-shopping"></i>
+          Cart
+          <span class="cart-count" data-cart-count>0</span>
+        </div>
+      </a>
+    </div>
+  </header>
+
+  <main class="page" id="productView">
+    <section class="gallery">
+      <div class="main">
+        <img id="productImage" alt="">
+      </div>
+    </section>
+
+    <section class="info">
+      <p class="eyebrow" id="productTag"></p>
+      <h1 id="productName"></h1>
+      <div class="rating-row">
+        <span id="productRating"></span>
+        <span id="productReviews"></span>
+      </div>
+      <p id="productDescription" class="lead-copy"></p>
+      <p id="deliveryNote" class="status-copy"></p>
+
+      <h3>Highlights</h3>
+      <ul id="productHighlights" class="highlights"></ul>
+
+      <div class="spec-toggle-row">
+        <button class="ghost-button spec-toggle-button" id="specToggleButton" type="button">Show Full Specifications</button>
+      </div>
+      <div id="specificationsPanel" hidden>
+        <h3>Specifications</h3>
+        <table class="spec-table">
+          <tbody id="productSpecs"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <aside class="buy">
+      <div class="buy-card">
+        <p class="eyebrow">Offer Price</p>
+        <h2 id="productPrice"></h2>
+        <p class="price-meta">
+          <span id="productOriginalPrice" class="strike-copy"></span>
+          <strong id="productDiscount" class="off"></strong>
+        </p>
+        <div class="pin">
+          <input id="pincodeInput" placeholder="Enter 6-digit pincode">
+          <button id="deliveryCheckButton" type="button">Check</button>
+        </div>
+        <div class="inline-actions pin-actions">
+          <button id="useSavedPincodeButton" class="ghost-button inline-button" type="button">Use saved pincode</button>
+          <span id="savedPincodeLabel" class="status-copy"></span>
+        </div>
+        <p id="deliveryMessage" class="status-copy"></p>
+        <button class="cart" id="addToCartButton" type="button">Add to Cart</button>
+        <button class="ghost-button wide-button" id="wishlistButton" type="button">Add to Wishlist</button>
+        <button class="buybtn" id="buyNowButton" type="button">Buy Now</button>
+        <p id="productFeedback" class="status-copy"></p>
+      </div>
+    </aside>
+  </main>
+
+  <section id="missingProduct" class="not-found" hidden>
+    <i class="fa-solid fa-circle-exclamation"></i>
+    <h3>This product could not be found</h3>
+    <p>Go back to the catalog and pick another item.</p>
+    <a href="index.html" class="hero-cta">Back to Home</a>
+  </section>
+
+  <section class="related-section">
+    <div class="section-head">
+      <div>
+        <p class="eyebrow">Similar Products</p>
+        <h2>You may also like</h2>
+      </div>
+    </div>
+    <section id="relatedGrid" class="products-container compact-grid"></section>
+  </section>
+
+  <section class="reviews-section">
+    <div class="section-head">
+      <div>
+        <p class="eyebrow">Verified Buyer Feedback</p>
+        <h2>Customer ratings, photos, and delivery experience</h2>
+      </div>
+    </div>
+    <div id="reviewList" class="review-list"></div>
+    <form id="reviewForm" class="review-form">
+      <h3>Share your product experience</h3>
+      <div class="grid-two">
+        <input type="text" name="author_name" placeholder="Your display name">
+        <div class="review-rating-picker">
+          <span class="rating-picker-label">Tap your star rating</span>
+          <div class="review-star-input" id="reviewStarInput">
+            <button type="button" class="review-star-button" data-rating="1" aria-label="1 star">★</button>
+            <button type="button" class="review-star-button" data-rating="2" aria-label="2 stars">★</button>
+            <button type="button" class="review-star-button" data-rating="3" aria-label="3 stars">★</button>
+            <button type="button" class="review-star-button" data-rating="4" aria-label="4 stars">★</button>
+            <button type="button" class="review-star-button" data-rating="5" aria-label="5 stars">★</button>
+          </div>
+          <input type="hidden" name="rating" id="reviewRatingValue" value="0">
+        </div>
+      </div>
+      <input type="text" name="title" placeholder="Give your review a short title">
+      <textarea name="comment" placeholder="Tell other buyers about quality, delivery, fit, or value for money"></textarea>
+      <div class="review-upload-box">
+        <label class="ghost-button inline-button review-upload-trigger" for="reviewImageInput">Add a review photo</label>
+        <input type="file" id="reviewImageInput" accept="image/*" hidden>
+        <input type="hidden" name="image" id="reviewImageData">
+        <img id="reviewImagePreview" class="review-image-preview" alt="Review preview" hidden>
+      </div>
+      <button class="buybtn inline-button" type="submit">Submit Review</button>
+      <p id="reviewStatus" class="status-copy"></p>
+    </form>
+  </section>
+
+  <footer class="footer">
+    <div class="footer-bottom">
+      <div>Secure Checkout</div>
+      <div>Trusted Delivery</div>
+      <div>© 2026 SwiftCart.com</div>
+    </div>
+  </footer>
+
+  <script src="js/products.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

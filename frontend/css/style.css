@@ -1,0 +1,159 @@
+*{
+    margin:0;
+    font-family:Arial;
+    border:border-box;
+
+}
+.icon{
+    color:black;
+}
+.navbar{
+    height:60px;
+    background-color:hsla(40, 74%, 67%, 0.613);
+    display:flex;
+    align-items:center;
+    justify-content:space-evenly;
+  
+}
+.nav-logo{
+    height:60px;
+    width:120px;
+}
+.logo{
+    background-image:url("swift.png");
+    background-size:140px 90px;
+    justify-content:center;
+    /* background-repeat:no-repeat; */
+    height:100%;
+    width:100%;
+    padding-left:0;
+    margin-left:0;
+
+}
+.border{
+    border:2px solid transparent
+}
+
+.border:hover{
+    border:2px solid rgb(0, 0, 0);
+}
+.add-first{
+    color:rgb(134, 6, 6);
+    font-size:0.8rem;
+    margin-left:20px;
+}
+
+.add-sec{
+    font-size:1rem;
+    margin-left:2px;
+
+}
+.add-icon{
+    display:flex;
+    align-items:center;
+}
+.nav-search{
+    display:flex;
+    justify-content:space-evenly;
+    background-color:hsla(40, 74%, 67%, 0.613);
+    /* border:2px solid transparent; */
+    height:41px;
+    width:800px;
+    margin-left:20px;
+    border-radius:10px;
+    align-items:center;
+    /* border:none; */
+}
+.search-select{
+    background-color:rgb(245, 199, 18);
+    width:50px;
+    height:100%;
+    text-align:center;
+    border-top-left-radius:10px;
+    border-bottom-left-radius:10px;
+    border:none;
+    
+}
+.search-input{
+    height:100%;
+    width:100%;
+    border-radius:4px;
+    font-size:1rem;
+    border:none;
+    
+}
+.Search-icon{
+    height:100%;
+    width:50px;
+    border-top-right-radius:10px;
+    border-bottom-right-radius:10px;
+    display:flex;
+    justify-content:space-evenly;
+    align-items:center;
+    background-color:rgb(245, 199, 18);
+    font-size:1.4rem;
+}
+.nav-search:hover{
+    border:2px solid hsla(40, 74%, 67%, 0.613);
+}
+span{
+    font-size:0.8rem;
+}
+.nav-second{
+    font-size:1rem;
+    font-weight:600;
+}
+.nav-cart i {
+    font-size:33px
+}
+.nav-cart{
+    font-size:1.2rem;
+    font-weight:700;
+}
+.account-user i{
+    font-size:33px;
+    
+}
+.menu{
+    color:black;
+    text-decoration:none;
+}
+.panel{
+    height:40px;
+    background-color:hsla(40, 47%, 42%, 0.481);
+    display:flex;
+    align-items:center;
+    justify-content:space-evenly;
+    
+}
+.panel-ops p{
+    display:inline;
+    margin-left:10px;
+}
+.panel-ops{
+    width:70%;
+    font-size:0.99rem;
+}
+.panel-deals{
+    font-size:0.9rem;
+    font-weight:700;
+}
+.hero-section{
+    background-image:url("back.png");
+    background-size:cover;
+    height:2000px;
+   
+}
+.hero-msg{
+    height:25px;
+    width:100%;
+    background-color:rgba(255, 206, 141, 0.622);
+    display:flex;
+    text-align:center;
+    justify-content:center;
+}
+.product-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(220px,1fr));
+    gap:20px;
+}

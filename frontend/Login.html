@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login - SwiftCart</title>
+<link rel="icon" type="image/svg+xml" href="images/swiftcart-favicon.svg">
+<link rel="stylesheet" href="css/Login.css">
+</head>
+<body data-page="login">
+
+<div class="container">
+    <section class="login-showcase">
+        <p class="login-chip">Marketplace Access</p>
+        <h1>Sign in to SwiftCart with a cleaner, trusted login flow.</h1>
+        <p class="sub">A sharper layout, stronger identity checks, and better recovery options help shoppers log in with less friction.</p>
+        <div class="login-benefits">
+            <article>
+                <strong>Secure identity</strong>
+                <span>Password and OTP options with account-aware login.</span>
+            </article>
+            <article>
+                <strong>Cleaner account access</strong>
+                <span>Buyer, merchant, and returning customer flows are handled in one place.</span>
+            </article>
+            <article>
+                <strong>Mobile linked accounts</strong>
+                <span>OTP login can surface multiple accounts tied to one number.</span>
+            </article>
+        </div>
+    </section>
+    <div class="login-box">
+        <div class="auth-head">
+            <p class="login-chip">SwiftCart Access</p>
+            <h2>Welcome Back</h2>
+            <p class="sub">Sign in with your email and password first, or use OTP when needed.</p>
+        </div>
+
+        <section class="auth-section">
+            <div class="auth-section-head">
+                <h3>Email Login</h3>
+                <p>Use your registered email and password.</p>
+            </div>
+            <form id="loginForm" class="auth-form" autocomplete="off">
+                <label class="auth-field">
+                    <span>Email Address</span>
+                    <input type="email" name="email" id="loginEmail" required autocomplete="username" placeholder="Enter your email">
+                </label>
+
+                <label class="auth-field">
+                    <span>Password</span>
+                    <input type="password" name="password" required autocomplete="current-password" placeholder="Enter your password">
+                </label>
+
+                <div class="captcha-card">
+                    <div class="captcha-head">
+                        <div>
+                            <strong>Human Verification</strong>
+                            <p>Solve one quick challenge before login or OTP actions.</p>
+                        </div>
+                        <button id="refreshCaptchaButton" class="captcha-refresh-button" type="button">Refresh</button>
+                    </div>
+                    <p id="captchaPrompt" class="captcha-prompt">Loading verification…</p>
+                    <label class="auth-field">
+                        <span>Enter the answer</span>
+                        <input type="text" id="captchaAnswer" inputmode="numeric" autocomplete="off" placeholder="Solve the verification">
+                    </label>
+                    <label class="captcha-check">
+                        <input type="checkbox" id="captchaCheckbox">
+                        <span>I’m not a robot. I’m a real shopper using SwiftCart.</span>
+                    </label>
+                </div>
+
+                <button class="btn" type="submit">Login</button>
+                <p id="loginStatus" class="status-copy"></p>
+            </form>
+            <div class="auth-links-row">
+                <p>Don't have an account? <a href="Account_Creation.html">Create one</a></p>
+                <button id="forgotPasswordToggle" class="auth-link-button" type="button">Forgot password?</button>
+            </div>
+            <a class="signup-cta-button" href="Account_Creation.html">Create New SwiftCart Account</a>
+        </section>
+
+        <section class="auth-section">
+            <div class="auth-section-head">
+                <h3>Login with OTP</h3>
+                <p>Use your mobile number and choose the linked account if more than one exists.</p>
+            </div>
+            <div class="auth-form">
+                <label class="auth-field">
+                    <span>Mobile Number with Country Code</span>
+                    <input type="text" id="loginMobile" maxlength="16" placeholder="+91 9876543210" autocomplete="tel">
+                </label>
+                <button class="btn otp-btn" id="sendLoginOtpButton" type="button">Send Login OTP</button>
+                <div class="linked-account-box" id="loginLinkedAccountsBox" hidden>
+                    <label for="loginAccountSelect">Choose linked account</label>
+                    <select id="loginAccountSelect"></select>
+                </div>
+                <label class="auth-field">
+                    <span>Enter OTP</span>
+                    <input type="text" id="loginOtpInput" maxlength="6" placeholder="6-digit OTP">
+                </label>
+                <button class="btn otp-btn" id="verifyLoginOtpButton" type="button">Verify & Login</button>
+                <p id="loginOtpStatus" class="status-copy"></p>
+            </div>
+        </section>
+
+        <section class="auth-section" id="recoveryPanel" hidden>
+            <div class="auth-section-head">
+                <h3>Recover Password with OTP</h3>
+                <p>Verify by email or mobile number, then create a new password.</p>
+            </div>
+            <div class="auth-form">
+                <label class="auth-field">
+                    <span>Email for Recovery</span>
+                    <input type="text" id="recoveryEmail" autocomplete="email" placeholder="Enter your email">
+                </label>
+                <label class="auth-field">
+                    <span>Or Mobile Number with Country Code</span>
+                    <input type="text" id="recoveryMobile" maxlength="16" placeholder="+91 9876543210" autocomplete="tel">
+                </label>
+                <button class="btn otp-btn" id="sendRecoveryOtpButton" type="button">Send Recovery OTP</button>
+                <div class="linked-account-box" id="recoveryLinkedAccountsBox" hidden>
+                    <label for="recoveryAccountSelect">Choose account to recover</label>
+                    <select id="recoveryAccountSelect"></select>
+                </div>
+                <label class="auth-field">
+                    <span>Enter Recovery OTP</span>
+                    <input type="text" id="recoveryOtpInput" maxlength="6" placeholder="6-digit OTP">
+                </label>
+                <label class="auth-field">
+                    <span>New Password</span>
+                    <input type="password" id="recoveryNewPassword" placeholder="Create a new password">
+                </label>
+                <label class="auth-field">
+                    <span>Confirm New Password</span>
+                    <input type="password" id="recoveryConfirmPassword" placeholder="Repeat the new password">
+                </label>
+                <button class="btn otp-btn" id="verifyRecoveryOtpButton" type="button">Verify OTP & Reset Password</button>
+                <p id="recoveryStatus" class="status-copy"></p>
+            </div>
+        </section>
+    </div>
+</div>
+
+<script src="js/products.js"></script>
+<script src="js/app.js"></script>
+
+</body>
+</html>

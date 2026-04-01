@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payment - SwiftCart</title>
+  <link rel="icon" type="image/svg+xml" href="images/swiftcart-favicon.svg">
+  <link rel="stylesheet" href="css/style2.css">
+  <link rel="stylesheet" href="css/Payment.css">
+  <link rel="stylesheet" href="css/index.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css">
+</head>
+<body data-page="payment">
+  <header>
+    <div class="navbar">
+      <a class="icon" href="index.html">
+        <div class="nav-logo border"><div class="logo"></div></div>
+      </a>
+      <div class="nav-search compact-search">
+        <input class="search-input" value="Secure checkout" aria-label="Checkout page" readonly>
+        <a class="Search-icon" href="Cart.html" aria-label="Back to cart">
+          <i class="fa-solid fa-cart-shopping"></i>
+        </a>
+      </div>
+      <a class="icon" href="Login.html">
+        <div class="account-user">
+          <i class="fa-regular fa-circle-user"></i>
+        </div>
+      </a>
+    </div>
+  </header>
+
+  <main class="payment-container">
+    <section class="payment-form">
+      <p class="eyebrow">Billing Details</p>
+      <h2>Complete your order</h2>
+      <div class="checkout-type-switch">
+        <label class="checkout-type-card">
+          <input type="radio" name="checkoutType" value="normal" checked>
+          <span>
+            <strong>Normal Customer</strong>
+            <small>Personal order for daily shopping</small>
+          </span>
+        </label>
+        <label class="checkout-type-card">
+          <input type="radio" name="checkoutType" value="merchant">
+          <span>
+            <strong>Merchant Customer</strong>
+            <small>Business purchase with company details</small>
+          </span>
+        </label>
+      </div>
+
+      <div class="saved-address-card">
+        <div class="saved-address-card-head">
+          <div>
+            <p class="eyebrow">Saved Delivery Addresses</p>
+            <strong>Choose where this order should be delivered</strong>
+          </div>
+          <a class="ghost-button inline-button" href="Account_Details.html">Manage Addresses</a>
+        </div>
+        <div id="savedDeliveryAddresses" class="saved-delivery-addresses"></div>
+        <p id="selectedAddressStatus" class="status-copy"></p>
+      </div>
+
+      <input id="billingName" type="text" placeholder="Full Name">
+      <input id="billingEmail" type="email" placeholder="Email Address">
+      <input id="billingMobile" type="text" placeholder="Mobile Number">
+      <input id="billingStreet" type="text" placeholder="Address">
+      <div class="form-row">
+        <input id="billingCity" type="text" placeholder="City">
+        <input id="billingState" type="text" placeholder="State">
+        <input id="billingPincode" type="text" placeholder="Pincode">
+      </div>
+      <div id="merchantFields" class="merchant-fields" hidden>
+        <input id="merchantBusinessName" type="text" placeholder="Business / Shop Name">
+        <div class="form-row">
+          <input id="merchantGstin" type="text" placeholder="GSTIN">
+          <input id="merchantContactRole" type="text" placeholder="Contact Role">
+        </div>
+      </div>
+      <div class="payment-method-card">
+        <p class="eyebrow">Payment Method</p>
+        <select id="paymentMethodSelect">
+          <option value="UPI / Card">UPI / Card</option>
+          <option value="Net Banking">Net Banking</option>
+          <option value="Cash on Delivery">Cash on Delivery</option>
+          <option value="EMI">EMI</option>
+        </select>
+      </div>
+      <div class="payment-brand-card">
+        <p class="eyebrow">Accepted Payments</p>
+        <div class="payment-logo-row" id="paymentLogoFallback">
+          <span><i class="fa-brands fa-cc-visa"></i> Visa</span>
+          <span><i class="fa-brands fa-cc-mastercard"></i> Mastercard</span>
+          <span><i class="fa-brands fa-google-pay"></i> Google Pay</span>
+          <span><i class="fa-solid fa-building-columns"></i> UPI</span>
+        </div>
+        <div id="paymentLogoCodeSlot" class="payment-logo-slot"></div>
+      </div>
+      <div id="paymentQrPanel" class="payment-qr-panel">
+        <p class="eyebrow">UPI QR Payment</p>
+        <img src="images/Payment.jpeg" alt="SwiftCart payment QR code" class="payment-qr-image">
+        <p class="status-copy">Scan this QR for UPI payment while completing checkout.</p>
+      </div>
+      <button class="pay-btn" id="payNowButton" type="button">Pay Now</button>
+      <p id="paymentStatus" class="status-copy"></p>
+    </section>
+
+    <aside class="order-summary">
+      <p class="eyebrow">Order Summary</p>
+      <div id="paymentItems"></div>
+      <div class="summary-row">
+        <span>Subtotal</span>
+        <strong id="paymentSubtotal">₹0</strong>
+      </div>
+      <div class="summary-row">
+        <span>Delivery</span>
+        <strong>₹50</strong>
+      </div>
+      <div class="summary-total">
+        <span>Total</span>
+        <strong id="paymentTotal">₹0</strong>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-bottom">
+      <div>Encrypted Payments</div>
+      <div>Trusted Support</div>
+      <div>© 2026 SwiftCart.com</div>
+    </div>
+  </footer>
+  <script src="js/products.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

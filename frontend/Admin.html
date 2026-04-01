@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard - SwiftCart</title>
+  <link rel="icon" type="image/svg+xml" href="images/swiftcart-favicon.svg">
+  <link rel="stylesheet" href="css/style2.css">
+  <link rel="stylesheet" href="css/index.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css">
+</head>
+<body data-page="admin">
+  <header>
+    <div class="navbar">
+      <a class="icon" href="index.html">
+        <div class="nav-logo border"><div class="logo"></div></div>
+      </a>
+      <div class="nav-search compact-search">
+        <input class="search-input" value="SwiftCart admin dashboard" readonly>
+        <a class="Search-icon" href="index.html"><i class="fa-solid fa-store"></i></a>
+      </div>
+      <a class="icon" href="Account_Details.html">
+        <div class="nav-signin border">
+          <p><span>Management</span></p>
+          <p class="nav-second">Products</p>
+        </div>
+      </a>
+      <button id="adminLogoutButton" class="ghost-button" type="button">Logout</button>
+    </div>
+  </header>
+
+  <main class="admin-layout">
+    <section class="admin-overview">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Admin</p>
+          <h2>Catalog management and inventory snapshot</h2>
+        </div>
+      </div>
+      <div id="adminStats" class="admin-stats"></div>
+      <div id="ownerIdentity" class="owner-identity"></div>
+      <div id="adminGrowthCards" class="admin-stats"></div>
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Platform Growth</p>
+          <h2>Orders, customers, and revenue trends</h2>
+        </div>
+      </div>
+      <div id="adminGrowthTimeline" class="analytics-grid"></div>
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Peak Order Times</p>
+          <h2>Orders by hour of day</h2>
+        </div>
+      </div>
+      <div id="adminHourlyTimeline" class="analytics-grid"></div>
+      <p id="adminStatus" class="status-copy"></p>
+    </section>
+
+    <section class="admin-table-card">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Finance Analytics</p>
+          <h2>Revenue, order, and cancellation movement</h2>
+        </div>
+        <button id="adminFinanceDisclosure" class="ghost-button" type="button">Show Details</button>
+      </div>
+      <div id="adminFinancePanel" hidden>
+        <div class="analytics-stack">
+          <div id="adminRevenueChart"></div>
+          <div id="adminOrderLineChart"></div>
+          <div id="adminCancelledChart"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="admin-table-card">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Category Analysis</p>
+          <h2>How each category is performing</h2>
+        </div>
+        <button id="adminCategoryDisclosure" class="ghost-button" type="button">Show Details</button>
+      </div>
+      <div id="adminCategoryPanel" hidden>
+        <div id="adminCategoryChart" class="analytics-grid"></div>
+        <div id="adminCategoryPerformance" class="admin-product-table"></div>
+      </div>
+    </section>
+
+    <section class="admin-table-card">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Bank Offers</p>
+          <h2>Discounts applied across categories</h2>
+        </div>
+        <div class="header-actions">
+          <button id="adminBankOffersDisclosure" class="ghost-button" type="button">Show Details</button>
+          <button id="adminBankOffersToggle" class="ghost-button" type="button">Show More</button>
+        </div>
+      </div>
+      <div id="adminBankOffersPanel" hidden>
+        <div id="adminBankOffersTable" class="admin-product-table"></div>
+      </div>
+    </section>
+
+    <section class="admin-form-card">
+      <h3>Apply category discount</h3>
+      <div class="admin-form">
+        <div class="grid-three discount-grid">
+          <label class="admin-field-stack">
+            <span>Choose category</span>
+            <select id="adminDiscountCategorySelect" required></select>
+          </label>
+          <label class="admin-field-stack">
+            <span>Discount percent</span>
+            <input type="number" id="adminDiscountPercent" min="1" max="99" placeholder="Discount percent e.g. 15">
+          </label>
+          <label class="admin-field-stack">
+            <span>Discount timer</span>
+            <input type="number" id="adminDiscountDuration" min="1" max="720" value="24" placeholder="Duration in hours">
+          </label>
+        </div>
+        <label class="admin-field-toggle"><input type="checkbox" id="adminDiscountSecondary" checked> Include products that use this as a secondary category</label>
+        <div class="inline-form-actions">
+          <button id="adminApplyCategoryDiscount" class="btn inline-button" type="button">Apply Discount to Category</button>
+          <button id="adminRemoveCategoryDiscount" class="ghost-button" type="button">Remove Category Discount</button>
+        </div>
+        <p class="status-copy">Apply a timed category-wide discount to listed products, show the live expiry timer, or remove the discount and restore original prices.</p>
+      </div>
+    </section>
+
+    <section class="admin-table-card">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Live Discounts</p>
+          <h2>Active category discounts and expiry timers</h2>
+        </div>
+      </div>
+      <div id="adminActiveDiscountsTable" class="admin-product-table"></div>
+    </section>
+
+    <section class="admin-form-card">
+      <h3>Add or update product</h3>
+      <form id="adminProductForm" class="admin-form">
+        <input type="hidden" id="adminProductId" name="product_id">
+        <input type="text" name="name" placeholder="Product name" required>
+        <input type="text" name="slug" placeholder="slug-name" required>
+        <div class="grid-two admin-category-builder">
+          <select name="category_id" id="adminCategorySelect" required></select>
+          <div class="inline-form-actions">
+            <input type="text" id="adminNewCategoryName" placeholder="Create new type / category">
+            <button id="adminCreateCategoryButton" class="ghost-button" type="button">Add Type</button>
+          </div>
+        </div>
+        <p class="status-copy">Hold `Cmd` or `Ctrl` to pick extra categories for the same product.</p>
+        <select name="secondary_categories" id="adminSecondaryCategoriesSelect" multiple size="4"></select>
+        <div class="admin-upload-stack">
+          <input type="file" id="adminImageFile" accept="image/png,image/jpeg,image/webp">
+          <input type="hidden" name="image" id="adminImageInput" required>
+          <p id="adminImageUploadStatus" class="status-copy"></p>
+        </div>
+        <div class="image-link-card">
+          <p>Image preview</p>
+          <img id="adminImagePreview" alt="Selected product preview" hidden>
+        </div>
+        <div class="grid-two">
+          <input type="number" step="0.01" name="price" placeholder="Price" required>
+          <input type="number" step="0.01" name="original_price" placeholder="Original price" required>
+        </div>
+        <div class="grid-two">
+          <input type="number" name="stock" placeholder="Stock" required>
+          <input type="text" name="tag" placeholder="Tag">
+        </div>
+        <textarea name="description" placeholder="Description"></textarea>
+        <textarea name="highlights" placeholder="Highlights separated by |"></textarea>
+        <textarea name="specifications" placeholder="Specifications like Fabric=Cotton|Fit=Regular"></textarea>
+        <div class="grid-two">
+          <label><input type="checkbox" name="featured"> Featured</label>
+          <label><input type="checkbox" name="deal_of_the_day"> Deal of the day</label>
+        </div>
+        <button class="btn inline-button" type="submit">Save Product</button>
+      </form>
+    </section>
+
+    <section class="admin-table-card">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Catalog Table</p>
+          <h2>Current products</h2>
+        </div>
+        <div class="header-actions">
+          <button id="adminProductsDisclosure" class="ghost-button" type="button">Show Details</button>
+          <button id="adminProductsToggle" class="ghost-button" type="button">Show More</button>
+        </div>
+      </div>
+      <div id="adminProductsPanel" hidden>
+        <div id="adminProductTable" class="admin-product-table"></div>
+      </div>
+    </section>
+
+    <section class="admin-table-card">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Owner Users</p>
+          <h2>Recent customer accounts</h2>
+        </div>
+        <div class="header-actions">
+          <button id="adminUsersDisclosure" class="ghost-button" type="button">Show Details</button>
+          <button id="adminUsersToggle" class="ghost-button" type="button">Show More</button>
+        </div>
+      </div>
+      <div id="adminUsersPanel" hidden>
+        <div id="adminUsersTable" class="admin-product-table"></div>
+      </div>
+    </section>
+
+    <section class="admin-table-card">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Identity Codes</p>
+          <h2>Unique IDs issued to users</h2>
+        </div>
+        <div class="header-actions">
+          <button id="adminCodesDisclosure" class="ghost-button" type="button">Show Details</button>
+          <button id="adminCodesToggle" class="ghost-button" type="button">Show More</button>
+        </div>
+      </div>
+      <div id="adminCodesPanel" hidden>
+        <div id="adminCodesTable" class="admin-product-table"></div>
+      </div>
+    </section>
+
+    <section class="admin-table-card">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Owner Orders</p>
+          <h2>Recent orders across the platform</h2>
+        </div>
+        <div class="header-actions">
+          <button id="adminOrdersDisclosure" class="ghost-button" type="button">Show Details</button>
+          <button id="adminOrdersToggle" class="ghost-button" type="button">Show More</button>
+        </div>
+      </div>
+      <div id="adminOrdersPanel" hidden>
+        <div id="adminOrdersTable" class="admin-product-table"></div>
+      </div>
+    </section>
+
+    <section class="admin-table-card">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Owner Reviews</p>
+          <h2>Customer reviews across the marketplace</h2>
+        </div>
+        <div class="header-actions">
+          <button id="adminReviewsDisclosure" class="ghost-button" type="button">Show Details</button>
+          <button id="adminReviewsToggle" class="ghost-button" type="button">Show More</button>
+        </div>
+      </div>
+      <div id="adminReviewsPanel" hidden>
+        <div id="adminReviewsTable" class="admin-product-table"></div>
+      </div>
+    </section>
+
+    <section class="admin-table-card">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Linked Mobile Numbers</p>
+          <h2>Multiple accounts connected to one phone number</h2>
+        </div>
+        <div class="header-actions">
+          <button id="adminLinkedDisclosure" class="ghost-button" type="button">Show Details</button>
+          <button id="adminLinkedToggle" class="ghost-button" type="button">Show More</button>
+        </div>
+      </div>
+      <div id="adminLinkedPanel" hidden>
+        <div id="adminLinkedAccountsTable" class="admin-product-table"></div>
+      </div>
+    </section>
+
+    <section class="admin-table-card">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">User Data Timeline</p>
+          <h2>Address, password, and profile changes with time</h2>
+        </div>
+        <div class="header-actions">
+          <button id="adminChangesDisclosure" class="ghost-button" type="button">Show Details</button>
+          <button id="adminChangesToggle" class="ghost-button" type="button">Show More</button>
+        </div>
+      </div>
+      <div id="adminChangesPanel" hidden>
+        <div id="adminChangesTable" class="admin-product-table"></div>
+      </div>
+    </section>
+
+    <section class="admin-table-card">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">AI Chat Logs</p>
+          <h2>What customers are asking SwiftCart AI</h2>
+        </div>
+        <div class="header-actions">
+          <button id="adminChatsDisclosure" class="ghost-button" type="button">Show Details</button>
+          <button id="adminChatsToggle" class="ghost-button" type="button">Show More</button>
+        </div>
+      </div>
+      <div id="adminChatsPanel" hidden>
+        <div id="adminChatsTable" class="admin-product-table"></div>
+      </div>
+    </section>
+
+    <section class="admin-table-card">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Owner Database</p>
+          <h2>Direct database access and table preview</h2>
+        </div>
+        <div class="header-actions">
+          <button id="adminDatabaseDisclosure" class="ghost-button" type="button">Show Details</button>
+          <button id="adminDbTablesToggle" class="ghost-button" type="button">Show More</button>
+        </div>
+      </div>
+      <div id="adminDatabasePanel" hidden>
+        <div id="adminDbTablesList" class="admin-product-table"></div>
+        <p id="adminDatabasePath" class="lead-copy"></p>
+        <div class="db-toolbar">
+          <select id="adminDbTableSelect"></select>
+          <button id="adminDbRefreshButton" class="ghost-button" type="button">Load Table</button>
+        </div>
+        <div id="adminDbTableInfo" class="status-copy"></div>
+        <div id="adminDbPreview" class="db-preview"></div>
+        <form id="adminDbQueryForm" class="admin-form">
+          <textarea id="adminDbQuery" name="sql" rows="6" placeholder="Run one SQL statement, for example: SELECT * FROM users LIMIT 20"></textarea>
+          <button class="btn inline-button" type="submit">Run SQL</button>
+        </form>
+        <p id="adminDbQueryStatus" class="status-copy"></p>
+        <div id="adminDbQueryResult" class="db-preview"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer"></footer>
+
+  <script src="js/products.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
