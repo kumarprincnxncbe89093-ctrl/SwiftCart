@@ -1,0 +1,16 @@
+providers = ["python"]
+
+[variables]
+PYTHONUNBUFFERED = "1"
+
+[phases.setup]
+nixPkgs = ["python311", "gcc"]
+
+[phases.install]
+cmds = [
+  "python -m pip install --upgrade pip",
+  "python -m pip install -r requirements.txt"
+]
+
+[start]
+cmd = "gunicorn -c gunicorn.conf.py wsgi:application"

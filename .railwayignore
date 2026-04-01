@@ -1,8 +1,8 @@
-.env
 .DS_Store
-__pycache__/
-*.pyc
+.env
+.git
 backend/database.db
 backend/database.db-shm
 backend/database.db-wal
-frontend/uploads/profiles/
+frontend/uploads/profiles
+SwiftCart
