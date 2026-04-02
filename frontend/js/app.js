@@ -274,6 +274,52 @@ function updateCartCount() {
   });
 }
 
+function firstNonEmptyText(...values) {
+  for (const value of values) {
+    const text = String(value || "").trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+function mergedProfileData(storedUser, remoteProfile) {
+  const firstName = firstNonEmptyText(remoteProfile?.first_name, storedUser?.first_name);
+  const lastName = firstNonEmptyText(remoteProfile?.last_name, storedUser?.last_name);
+  const fullName = firstNonEmptyText(
+    remoteProfile?.full_name,
+    [firstName, lastName].filter(Boolean).join(" "),
+    storedUser?.full_name
+  );
+
+  return {
+    ...(storedUser || {}),
+    ...(remoteProfile || {}),
+    first_name: firstName,
+    last_name: lastName,
+    full_name: fullName,
+    email: firstNonEmptyText(remoteProfile?.email, storedUser?.email),
+    mobile: firstNonEmptyText(remoteProfile?.mobile, storedUser?.mobile),
+    unique_code: firstNonEmptyText(remoteProfile?.unique_code, storedUser?.unique_code),
+    profile_image: firstNonEmptyText(remoteProfile?.profile_image, storedUser?.profile_image),
+    created_at: firstNonEmptyText(remoteProfile?.created_at, storedUser?.created_at),
+    addresses: Array.isArray(remoteProfile?.addresses)
+      ? remoteProfile.addresses
+      : Array.isArray(storedUser?.addresses)
+        ? storedUser.addresses
+        : [],
+    address: remoteProfile?.address || storedUser?.address || null,
+  };
+}
+
+function setImageSourceWithFallback(node, src, fallbackSrc = "images/swift.png") {
+  if (!(node instanceof HTMLImageElement)) return;
+  node.onerror = () => {
+    node.onerror = null;
+    node.src = fallbackSrc;
+  };
+  node.src = src || fallbackSrc;
+}
+
 function buildUserAvatarMarkup(user) {
   if (!user) {
     return `<i class="fa-regular fa-circle-user"></i>`;
@@ -282,7 +328,7 @@ function buildUserAvatarMarkup(user) {
     const photoPrefs = user?.id ? loadProfilePhotoPrefs(user.id) : {};
     const zoom = Number(photoPrefs.zoom) || 1;
     const focus = Number(photoPrefs.focus) || 50;
-    return `<img class="account-avatar-image" src="${user.profile_image}" alt="${escapeHtml(user.full_name || user.first_name || "User")}" style="--profile-zoom:${zoom}; --profile-focus:${focus}%;">`;
+    return `<img class="account-avatar-image" src="${user.profile_image}" alt="${escapeHtml(user.full_name || user.first_name || "User")}" style="--profile-zoom:${zoom}; --profile-focus:${focus}%;" onerror="this.onerror=null;this.src='images/swift.png';">`;
   }
 
   const seed = String(user?.first_name || user?.full_name || "U").trim().charAt(0).toUpperCase();
@@ -390,11 +436,24 @@ function buildProductCard(product) {
 function renderProductCollection(containerId, products) {
   const container = document.getElementById(containerId);
   if (!container) return;
-  container.innerHTML = products.map((product) => buildProductCard(product)).join("");
+  const items = Array.isArray(products) ? products : [];
+  container.dataset.empty = items.length ? "false" : "true";
+  container.innerHTML = items.map((product) => buildProductCard(product)).join("");
   const emptyState = document.getElementById("notFound");
   if (containerId === "productGrid" && emptyState) {
-    emptyState.hidden = products.length > 0;
-    emptyState.style.display = products.length > 0 ? "none" : "grid";
+    emptyState.hidden = items.length > 0;
+    emptyState.style.display = items.length > 0 ? "none" : "grid";
+  }
+}
+
+function toggleCatalogSection(containerId, hasItems) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const head = container.previousElementSibling;
+  const visible = Boolean(hasItems);
+  container.hidden = !visible;
+  if (head?.classList?.contains("section-head")) {
+    head.hidden = !visible;
   }
 }
 
@@ -987,6 +1046,7 @@ function renderCategories(categories) {
 
 function renderImportedProducts(products) {
   renderProductCollection("researchGrid", products);
+  toggleCatalogSection("researchGrid", Array.isArray(products) && products.length > 0);
 }
 
 async function runCatalogSearch() {
@@ -1092,8 +1152,10 @@ async function renderHomePage() {
   renderCategories(payload.categories);
   renderImportedProducts(payload.imported_products || []);
   renderProductCollection("dealGrid", payload.deal_of_the_day);
+  toggleCatalogSection("dealGrid", Array.isArray(payload.deal_of_the_day) && payload.deal_of_the_day.length > 0);
   renderProductCollection("productGrid", payload.featured_products);
   renderProductCollection("arrivalGrid", payload.new_arrivals);
+  toggleCatalogSection("arrivalGrid", Array.isArray(payload.new_arrivals) && payload.new_arrivals.length > 0);
 
   const searchInput = document.getElementById("catalogSearch");
   const searchForm = document.getElementById("catalogSearchForm");
@@ -2336,7 +2398,7 @@ async function renderAccountPage() {
     return;
   }
 
-  const profile = await apiFetch(`/users/${user.id}/profile`);
+  const profile = mergedProfileData(user, await apiFetch(`/users/${user.id}/profile`));
   saveStoredUser(profile);
   syncUserUi();
   const photoPrefs = loadProfilePhotoPrefs(profile.id);
@@ -2369,8 +2431,7 @@ async function renderAccountPage() {
     node.value = profile.gstin || "";
   });
   document.querySelectorAll("[data-profile-avatar]").forEach((node) => {
-    if (!(node instanceof HTMLImageElement)) return;
-    node.src = profile.profile_image || "images/swift.png";
+    setImageSourceWithFallback(node, profile.profile_image, "images/swift.png");
   });
   const avatarStage = document.getElementById("profileAvatarStage");
   const shapeSelect = document.getElementById("profileShapeSelect");
@@ -2653,8 +2714,7 @@ async function renderAccountPage() {
       saveStoredUser(response.user);
       syncUserUi();
       document.querySelectorAll("[data-profile-avatar]").forEach((node) => {
-        if (!(node instanceof HTMLImageElement)) return;
-        node.src = response.user.profile_image || "images/swift.png";
+        setImageSourceWithFallback(node, response.user.profile_image, "images/swift.png");
       });
       profileImageForm.reset();
       if (profileFileName) profileFileName.textContent = "No file selected";
@@ -2669,15 +2729,13 @@ async function renderAccountPage() {
     if (profileFileName) profileFileName.textContent = file?.name || "No file selected";
     if (!file) {
       document.querySelectorAll("[data-profile-avatar]").forEach((node) => {
-        if (!(node instanceof HTMLImageElement)) return;
-        node.src = profile.profile_image || "images/swift.png";
+        setImageSourceWithFallback(node, profile.profile_image, "images/swift.png");
       });
       return;
     }
     const previewUrl = URL.createObjectURL(file);
     document.querySelectorAll("[data-profile-avatar]").forEach((node) => {
-      if (!(node instanceof HTMLImageElement)) return;
-      node.src = previewUrl;
+      setImageSourceWithFallback(node, previewUrl, "images/swift.png");
     });
   });
 
@@ -2694,8 +2752,7 @@ async function renderAccountPage() {
       saveStoredUser(response.user);
       syncUserUi();
       document.querySelectorAll("[data-profile-avatar]").forEach((node) => {
-        if (!(node instanceof HTMLImageElement)) return;
-        node.src = "images/swift.png";
+        setImageSourceWithFallback(node, "images/swift.png", "images/swift.png");
       });
       if (profileFileName) profileFileName.textContent = "No file selected";
       setStatus(profileImageStatus, "Profile photo removed. Default SwiftCart photo restored.", "success");

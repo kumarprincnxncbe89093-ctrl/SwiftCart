@@ -625,9 +625,9 @@ span{
     gap:20px;
     padding:20px;
 }
-/* FIX EMPTY SPACE */
-.products-container{
-    min-height:60vh;
+.products-container[data-empty="true"]{
+    min-height:0;
+    padding-top:0;
 }
 
 .product-card{
@@ -677,21 +677,12 @@ span{
     background:rgba(255,255,255,0.05);
     border:1px solid rgba(255,255,255,0.08);
 }
-/* CENTER SCREEN MESSAGE */
 .not-found{
-    position:absolute;
-    top:50%;
-    left:50%;
-    transform:translate(-50%, -50%);
-
     display:flex;
     flex-direction:column;
     align-items:center;
     text-align:center;
     color:#555;
-}
-body{
-    position:relative;
 }
 .product-card{
     text-decoration:none;
