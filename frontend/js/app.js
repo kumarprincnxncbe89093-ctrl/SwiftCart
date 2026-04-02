@@ -470,8 +470,13 @@ async function loadWishlistIds() {
     return state.wishlistIds;
   }
 
-  const wishlist = await apiFetch(`/users/${user.id}/wishlist`);
-  state.wishlistIds = new Set(wishlist.map((item) => item.id));
+  try {
+    const wishlist = await apiFetch(`/users/${user.id}/wishlist`);
+    state.wishlistIds = new Set(wishlist.map((item) => item.id));
+  } catch (error) {
+    state.wishlistIds = new Set();
+    console.warn("SwiftCart wishlist sync skipped:", error);
+  }
   return state.wishlistIds;
 }
 
