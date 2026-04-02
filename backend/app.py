@@ -15,6 +15,26 @@ from backend.routes.users import users_bp
 BASE_DIR = Path(__file__).resolve().parent.parent
 FRONTEND_DIR = BASE_DIR / "frontend"
 UPLOADS_DIR = FRONTEND_DIR / "uploads" / "profiles"
+ALLOWED_ORIGINS = {
+    origin.strip()
+    for origin in os.getenv("ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
+}
+CONTENT_SECURITY_POLICY = "; ".join(
+    [
+        "default-src 'self'",
+        "img-src 'self' data: https: blob:",
+        "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com",
+        "script-src 'self' 'unsafe-inline'",
+        "font-src 'self' data: https://cdnjs.cloudflare.com",
+        "connect-src 'self'",
+        "frame-src https://maps.google.com https://www.google.com",
+        "object-src 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+        "frame-ancestors 'none'",
+    ]
+)
 
 
 def create_app() -> Flask:
@@ -34,9 +54,22 @@ def create_app() -> Flask:
 
     @app.after_request
     def add_headers(response):
-        response.headers["Access-Control-Allow-Origin"] = "*"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        origin = request.headers.get("Origin", "").strip()
+        if origin and origin in ALLOWED_ORIGINS:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Vary"] = "Origin"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(self)"
+        response.headers["Content-Security-Policy"] = CONTENT_SECURITY_POLICY
+        response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+        response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+        forwarded_proto = request.headers.get("X-Forwarded-Proto", "")
+        if request.is_secure or "https" in forwarded_proto.lower():
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         if request.path.startswith("/api") or response.mimetype == "text/html":
             response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
             response.headers["Pragma"] = "no-cache"

@@ -7,6 +7,7 @@ from flask import Blueprint, jsonify, request
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
+from backend.auth import create_auth_token, require_authenticated_user
 from backend.models import (
     Address,
     BASE_DIR,
@@ -45,13 +46,9 @@ def _sentence_case(value: str) -> str:
 
 
 def _require_owner(session):
-    user_id = request.args.get("user_id", type=int)
-    if not user_id:
-        return None, (jsonify({"message": "Owner user_id is required."}), 401)
-
-    user = session.query(User).filter(User.id == user_id).first()
-    if not user or user.account_type != "owner":
-        return None, (jsonify({"message": "Owner access only."}), 403)
+    user, error = require_authenticated_user(session, allowed_roles={"owner"})
+    if error:
+        return None, error
     return user, None
 
 
@@ -67,6 +64,18 @@ def _banned_account_response(user: User):
         ),
         403,
     )
+
+
+def _auth_response(user: User) -> dict:
+    payload = serialize_user(user)
+    payload["auth_token"] = create_auth_token(user)
+    return {
+        "user": payload,
+    }
+
+
+def _require_same_user(session, user_id: int):
+    return require_authenticated_user(session, expected_user_id=user_id)
 
 
 def _ensure_user_is_active(user: User):
@@ -381,7 +390,7 @@ def login_with_otp():
 
         otp.consumed_at = datetime.utcnow()
         _stamp_login_context(user, method="otp_login")
-        return jsonify({"message": "OTP login successful.", "user": serialize_user(user)})
+        return jsonify({"message": "OTP login successful.", **_auth_response(user)})
 
 
 @users_bp.post("/auth/reset-password-otp")
@@ -539,7 +548,7 @@ def register():
         session.refresh(user)
         otp.consumed_at = datetime.utcnow()
 
-        return jsonify({"message": "Account created successfully.", "user": serialize_user(user)}), 201
+        return jsonify({"message": "Account created successfully.", **_auth_response(user)}), 201
 
 
 @users_bp.post("/auth/login")
@@ -566,7 +575,7 @@ def login():
         return jsonify(
             {
                 "message": "Login successful.",
-                "user": serialize_user(user),
+                **_auth_response(user),
             }
         )
 
@@ -586,12 +595,9 @@ def change_password(user_id: int):
         return jsonify({"message": "New password must be at least 8 characters."}), 400
 
     with session_scope() as session:
-        user = session.query(User).filter(User.id == user_id).first()
-        if not user:
-            return jsonify({"message": "User not found."}), 404
-        banned_error = _ensure_user_is_active(user)
-        if banned_error:
-            return banned_error
+        user, error = _require_same_user(session, user_id)
+        if error:
+            return error
         if not check_password_hash(user.password_hash, current_password):
             return jsonify({"message": "Current password is incorrect."}), 400
         if check_password_hash(user.password_hash, new_password):
@@ -612,7 +618,7 @@ def change_password(user_id: int):
         return jsonify(
             {
                 "message": "Password updated successfully.",
-                "user": serialize_user(user),
+                **_auth_response(user),
                 "password_history_count": len(get_password_history(user)),
             }
         )
@@ -621,10 +627,12 @@ def change_password(user_id: int):
 @users_bp.get("/users/<int:user_id>/profile")
 def get_profile(user_id: int):
     with session_scope() as session:
-        user = session.query(User).filter(User.id == user_id).first()
-        if not user:
-            return jsonify({"message": "User not found"}), 404
-        return jsonify(serialize_user(user))
+        user, error = _require_same_user(session, user_id)
+        if error:
+            return error
+        payload = serialize_user(user)
+        payload["auth_token"] = create_auth_token(user)
+        return jsonify(payload)
 
 
 @users_bp.put("/users/<int:user_id>/profile")
@@ -632,12 +640,9 @@ def update_profile(user_id: int):
     payload = request.get_json(silent=True) or {}
 
     with session_scope() as session:
-        user = session.query(User).filter(User.id == user_id).first()
-        if not user:
-            return jsonify({"message": "User not found"}), 404
-        banned_error = _ensure_user_is_active(user)
-        if banned_error:
-            return banned_error
+        user, error = _require_same_user(session, user_id)
+        if error:
+            return error
 
         next_email = payload.get("email", user.email).strip().lower()
         if not next_email or "@" not in next_email:
@@ -672,7 +677,7 @@ def update_profile(user_id: int):
         user.shop_name = next_shop_name if user.account_type in {"merchant", "seller"} else ""
         user.gstin = next_gstin if user.account_type in {"merchant", "seller"} else ""
 
-        return jsonify({"message": "Personal information updated successfully.", "user": serialize_user(user)})
+        return jsonify({"message": "Personal information updated successfully.", **_auth_response(user)})
 
 
 @users_bp.post("/users/<int:user_id>/address")
@@ -684,12 +689,9 @@ def update_address(user_id: int):
         return jsonify({"message": f"Missing fields: {', '.join(missing)}"}), 400
 
     with session_scope() as session:
-        user = session.query(User).filter(User.id == user_id).first()
-        if not user:
-            return jsonify({"message": "User not found."}), 404
-        banned_error = _ensure_user_is_active(user)
-        if banned_error:
-            return banned_error
+        user, error = _require_same_user(session, user_id)
+        if error:
+            return error
 
         address = next((item for item in user.addresses if item.is_default), None) or (user.addresses[0] if user.addresses else Address(user_id=user.id))
         if not user.addresses:
@@ -702,15 +704,15 @@ def update_address(user_id: int):
 
         session.flush()
         session.refresh(user)
-        return jsonify({"message": "Address updated successfully.", "user": serialize_user(user)})
+        return jsonify({"message": "Address updated successfully.", **_auth_response(user)})
 
 
 @users_bp.get("/users/<int:user_id>/addresses")
 def list_addresses(user_id: int):
     with session_scope() as session:
-        user = session.query(User).filter(User.id == user_id).first()
-        if not user:
-            return jsonify({"message": "User not found."}), 404
+        user, error = _require_same_user(session, user_id)
+        if error:
+            return error
         addresses = sorted(user.addresses, key=lambda item: (not item.is_default, item.created_at))
         return jsonify([serialize_address(address) for address in addresses])
 
@@ -724,12 +726,9 @@ def add_address(user_id: int):
         return jsonify({"message": f"Missing fields: {', '.join(missing)}"}), 400
 
     with session_scope() as session:
-        user = session.query(User).filter(User.id == user_id).first()
-        if not user:
-            return jsonify({"message": "User not found."}), 404
-        banned_error = _ensure_user_is_active(user)
-        if banned_error:
-            return banned_error
+        user, error = _require_same_user(session, user_id)
+        if error:
+            return error
 
         make_default = bool(payload.get("is_default")) or not user.addresses
         if make_default:
@@ -751,7 +750,7 @@ def add_address(user_id: int):
         _apply_address_updates(session, user=user, address=address, payload=payload)
         session.flush()
         session.refresh(user)
-        return jsonify({"message": "New address saved successfully.", "user": serialize_user(user)}), 201
+        return jsonify({"message": "New address saved successfully.", **_auth_response(user)}), 201
 
 
 @users_bp.put("/users/<int:user_id>/addresses/<int:address_id>")
@@ -763,12 +762,9 @@ def update_saved_address(user_id: int, address_id: int):
         return jsonify({"message": f"Missing fields: {', '.join(missing)}"}), 400
 
     with session_scope() as session:
-        user = session.query(User).filter(User.id == user_id).first()
-        if not user:
-            return jsonify({"message": "User not found."}), 404
-        banned_error = _ensure_user_is_active(user)
-        if banned_error:
-            return banned_error
+        user, error = _require_same_user(session, user_id)
+        if error:
+            return error
         address = next((item for item in user.addresses if item.id == address_id), None)
         if not address:
             return jsonify({"message": "Address not found."}), 404
@@ -780,18 +776,15 @@ def update_saved_address(user_id: int, address_id: int):
         _apply_address_updates(session, user=user, address=address, payload=payload)
         session.flush()
         session.refresh(user)
-        return jsonify({"message": "Saved address updated successfully.", "user": serialize_user(user)})
+        return jsonify({"message": "Saved address updated successfully.", **_auth_response(user)})
 
 
 @users_bp.post("/users/<int:user_id>/addresses/<int:address_id>/default")
 def set_default_address(user_id: int, address_id: int):
     with session_scope() as session:
-        user = session.query(User).filter(User.id == user_id).first()
-        if not user:
-            return jsonify({"message": "User not found."}), 404
-        banned_error = _ensure_user_is_active(user)
-        if banned_error:
-            return banned_error
+        user, error = _require_same_user(session, user_id)
+        if error:
+            return error
         address = next((item for item in user.addresses if item.id == address_id), None)
         if not address:
             return jsonify({"message": "Address not found."}), 404
@@ -808,18 +801,15 @@ def set_default_address(user_id: int, address_id: int):
         )
         session.flush()
         session.refresh(user)
-        return jsonify({"message": f"{address.label} is now your default delivery address.", "user": serialize_user(user)})
+        return jsonify({"message": f"{address.label} is now your default delivery address.", **_auth_response(user)})
 
 
 @users_bp.delete("/users/<int:user_id>/addresses/<int:address_id>")
 def delete_saved_address(user_id: int, address_id: int):
     with session_scope() as session:
-        user = session.query(User).filter(User.id == user_id).first()
-        if not user:
-            return jsonify({"message": "User not found."}), 404
-        banned_error = _ensure_user_is_active(user)
-        if banned_error:
-            return banned_error
+        user, error = _require_same_user(session, user_id)
+        if error:
+            return error
         address = next((item for item in user.addresses if item.id == address_id), None)
         if not address:
             return jsonify({"message": "Address not found."}), 404
@@ -854,7 +844,7 @@ def delete_saved_address(user_id: int, address_id: int):
         )
         session.flush()
         session.refresh(user)
-        return jsonify({"message": f"{removed_label} was removed from saved addresses.", "user": serialize_user(user)})
+        return jsonify({"message": f"{removed_label} was removed from saved addresses.", **_auth_response(user)})
 
 
 @users_bp.post("/users/<int:user_id>/profile-image")
@@ -875,12 +865,9 @@ def upload_profile_image(user_id: int):
     image_path = f"uploads/profiles/{final_name}"
 
     with session_scope() as session:
-        user = session.query(User).filter(User.id == user_id).first()
-        if not user:
-            return jsonify({"message": "User not found."}), 404
-        banned_error = _ensure_user_is_active(user)
-        if banned_error:
-            return banned_error
+        user, error = _require_same_user(session, user_id)
+        if error:
+            return error
         log_user_change(
             session,
             user_id=user.id,
@@ -892,18 +879,15 @@ def upload_profile_image(user_id: int):
         user.profile_image = image_path
         session.flush()
         session.refresh(user)
-        return jsonify({"message": "Profile image updated successfully.", "user": serialize_user(user)})
+        return jsonify({"message": "Profile image updated successfully.", **_auth_response(user)})
 
 
 @users_bp.delete("/users/<int:user_id>/profile-image")
 def remove_profile_image(user_id: int):
     with session_scope() as session:
-        user = session.query(User).filter(User.id == user_id).first()
-        if not user:
-            return jsonify({"message": "User not found."}), 404
-        banned_error = _ensure_user_is_active(user)
-        if banned_error:
-            return banned_error
+        user, error = _require_same_user(session, user_id)
+        if error:
+            return error
         log_user_change(
             session,
             user_id=user.id,
@@ -915,12 +899,15 @@ def remove_profile_image(user_id: int):
         user.profile_image = ""
         session.flush()
         session.refresh(user)
-        return jsonify({"message": "Profile image removed successfully.", "user": serialize_user(user)})
+        return jsonify({"message": "Profile image removed successfully.", **_auth_response(user)})
 
 
 @users_bp.get("/users/<int:user_id>/wishlist")
 def get_wishlist(user_id: int):
     with session_scope() as session:
+        user, error = _require_same_user(session, user_id)
+        if error:
+            return error
         items = (
             session.query(WishlistItem)
             .filter(WishlistItem.user_id == user_id)
@@ -939,12 +926,9 @@ def add_to_wishlist(user_id: int):
         return jsonify({"message": "product_id is required"}), 400
 
     with session_scope() as session:
-        user = session.query(User).filter(User.id == user_id).first()
-        if not user:
-            return jsonify({"message": "User not found."}), 404
-        banned_error = _ensure_user_is_active(user)
-        if banned_error:
-            return banned_error
+        user, error = _require_same_user(session, user_id)
+        if error:
+            return error
         existing = (
             session.query(WishlistItem)
             .filter(WishlistItem.user_id == user_id, WishlistItem.product_id == product_id)
@@ -960,12 +944,9 @@ def add_to_wishlist(user_id: int):
 @users_bp.delete("/users/<int:user_id>/wishlist/<int:product_id>")
 def remove_from_wishlist(user_id: int, product_id: int):
     with session_scope() as session:
-        user = session.query(User).filter(User.id == user_id).first()
-        if not user:
-            return jsonify({"message": "User not found."}), 404
-        banned_error = _ensure_user_is_active(user)
-        if banned_error:
-            return banned_error
+        user, error = _require_same_user(session, user_id)
+        if error:
+            return error
         item = (
             session.query(WishlistItem)
             .filter(WishlistItem.user_id == user_id, WishlistItem.product_id == product_id)

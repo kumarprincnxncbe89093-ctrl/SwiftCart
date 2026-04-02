@@ -107,10 +107,12 @@ def _resolve_database_url() -> str:
 
 
 DATABASE_URL = _resolve_database_url()
-OWNER_EMAIL = "princekumar123pr17@gmail.com"
-OWNER_PASSWORD = "172388Pr@"
-MERCHANT_DEMO_EMAIL = "merchant@swiftcart.com"
-MERCHANT_DEMO_PASSWORD = "SwiftCartMerchant@123"
+OWNER_EMAIL = (os.getenv("OWNER_EMAIL") or "owner@swiftcart.local").strip().lower()
+OWNER_PASSWORD = (os.getenv("OWNER_PASSWORD") or "").strip()
+MERCHANT_DEMO_EMAIL = (os.getenv("MERCHANT_DEMO_EMAIL") or "merchant@swiftcart.com").strip().lower()
+MERCHANT_DEMO_PASSWORD = (os.getenv("MERCHANT_DEMO_PASSWORD") or "").strip()
+ENABLE_DEMO_MERCHANT = str(os.getenv("ENABLE_DEMO_MERCHANT", "0")).strip().lower() in {"1", "true", "yes", "on"}
+ROTATE_SEEDED_PASSWORDS = str(os.getenv("ROTATE_SEEDED_PASSWORDS", "0")).strip().lower() in {"1", "true", "yes", "on"}
 
 SQLALCHEMY_ENGINE_KWARGS = {
     "future": True,
@@ -1362,6 +1364,9 @@ def seed_data() -> None:
 
 
 def ensure_owner_account() -> None:
+    if not OWNER_PASSWORD:
+        logger.warning("Skipping automatic owner seeding because OWNER_PASSWORD is not configured.")
+        return
     with session_scope() as session:
         owner = (
             session.query(User)
@@ -1375,8 +1380,11 @@ def ensure_owner_account() -> None:
         )
         if owner:
             owner.account_type = "owner"
+            should_rotate_password = False
             if owner.email.strip().lower() == "owner@swiftcart.com":
                 owner.email = OWNER_EMAIL
+                should_rotate_password = True
+            if should_rotate_password or ROTATE_SEEDED_PASSWORDS:
                 owner.password_hash = generate_password_hash(OWNER_PASSWORD)
                 owner.password_changed_at = datetime.utcnow()
             if not owner.first_name:
@@ -1418,12 +1426,17 @@ def ensure_owner_account() -> None:
 
 
 def ensure_merchant_demo_account() -> None:
+    if not ENABLE_DEMO_MERCHANT or not MERCHANT_DEMO_PASSWORD:
+        return
     with session_scope() as session:
         merchant = session.query(User).filter(User.email == MERCHANT_DEMO_EMAIL).first()
         if merchant:
             merchant.account_type = "merchant"
             merchant.shop_name = merchant.shop_name or "SwiftCart Merchant Studio"
             merchant.gstin = merchant.gstin or "29MERCHANT1234X1Z5"
+            if ROTATE_SEEDED_PASSWORDS:
+                merchant.password_hash = generate_password_hash(MERCHANT_DEMO_PASSWORD)
+                merchant.password_changed_at = datetime.utcnow()
             return
 
         merchant = User(

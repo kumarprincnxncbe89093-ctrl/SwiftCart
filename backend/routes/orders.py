@@ -3,7 +3,8 @@ from datetime import datetime
 from flask import Blueprint, jsonify, request
 from sqlalchemy.orm import joinedload
 
-from backend.models import Address, Order, OrderItem, Product, User, log_user_change, serialize_order, session_scope
+from backend.auth import require_authenticated_user
+from backend.models import Address, Order, OrderItem, Product, log_user_change, serialize_order, session_scope
 
 
 orders_bp = Blueprint("orders", __name__)
@@ -19,23 +20,6 @@ def _sentence_case(value: str) -> str:
     if not cleaned:
         return ""
     return cleaned[:1].upper() + cleaned[1:]
-
-
-def _ensure_active_user(user: User):
-    if user and user.is_banned:
-        reason = str(user.ban_reason or "").strip() or "Contact the owner for reactivation."
-        return (
-            jsonify(
-                {
-                    "message": f"Your account has been banned. {reason}",
-                    "is_banned": True,
-                    "force_logout": True,
-                }
-            ),
-            403,
-        )
-    return None
-
 
 def _recalculate_order_totals(order: Order) -> None:
     active_items = [item for item in order.items if (item.status or "Placed").lower() != "cancelled"]
@@ -63,24 +47,18 @@ def _sync_order_status_from_items(order: Order) -> None:
 @orders_bp.post("/orders/checkout")
 def checkout():
     payload = request.get_json(silent=True) or {}
-    user_id = payload.get("user_id")
     items = payload.get("items", [])
     shipping_address = payload.get("shipping_address", {})
     customer_type = payload.get("customer_type", "normal").strip() or "normal"
     merchant_profile = payload.get("merchant_profile", {}) or {}
 
-    if not user_id:
-        return jsonify({"message": "user_id is required"}), 400
     if not items:
         return jsonify({"message": "At least one cart item is required"}), 400
 
     with session_scope() as session:
-        user = session.query(User).filter(User.id == user_id).first()
-        if not user:
-            return jsonify({"message": "User not found"}), 404
-        banned_error = _ensure_active_user(user)
-        if banned_error:
-            return banned_error
+        user, error = require_authenticated_user(session)
+        if error:
+            return error
 
         requested_quantities: dict[int, int] = {}
         for item in items:
@@ -196,10 +174,13 @@ def checkout():
 @orders_bp.get("/users/<int:user_id>/orders")
 def list_orders(user_id: int):
     with session_scope() as session:
+        current_user, error = require_authenticated_user(session, expected_user_id=user_id)
+        if error:
+            return error
         orders = (
             session.query(Order)
             .options(joinedload(Order.items).joinedload(OrderItem.product), joinedload(Order.user))
-            .filter(Order.user_id == user_id)
+            .filter(Order.user_id == current_user.id)
             .order_by(Order.created_at.desc())
             .all()
         )
@@ -209,19 +190,19 @@ def list_orders(user_id: int):
 @orders_bp.post("/orders/<int:order_id>/cancel")
 def cancel_order(order_id: int):
     payload = request.get_json(silent=True) or {}
-    user_id = payload.get("user_id")
     reason = str(payload.get("reason", "")).strip()
 
-    if not user_id:
-        return jsonify({"message": "user_id is required"}), 400
     if len(reason.split()) < 10:
         return jsonify({"message": "Cancellation reason must be at least 10 words."}), 400
 
     with session_scope() as session:
+        current_user, error = require_authenticated_user(session)
+        if error:
+            return error
         order = (
             session.query(Order)
             .options(joinedload(Order.items).joinedload(OrderItem.product), joinedload(Order.user))
-            .filter(Order.id == order_id, Order.user_id == user_id)
+            .filter(Order.id == order_id, Order.user_id == current_user.id)
             .first()
         )
         if not order:
@@ -256,19 +237,19 @@ def cancel_order(order_id: int):
 @orders_bp.post("/orders/<int:order_id>/items/<int:order_item_id>/cancel")
 def cancel_order_item(order_id: int, order_item_id: int):
     payload = request.get_json(silent=True) or {}
-    user_id = payload.get("user_id")
     reason = str(payload.get("reason", "")).strip()
 
-    if not user_id:
-        return jsonify({"message": "user_id is required"}), 400
     if len(reason.split()) < 10:
         return jsonify({"message": "Cancellation reason must be at least 10 words."}), 400
 
     with session_scope() as session:
+        current_user, error = require_authenticated_user(session)
+        if error:
+            return error
         order = (
             session.query(Order)
             .options(joinedload(Order.items).joinedload(OrderItem.product), joinedload(Order.user))
-            .filter(Order.id == order_id, Order.user_id == user_id)
+            .filter(Order.id == order_id, Order.user_id == current_user.id)
             .first()
         )
         if not order:

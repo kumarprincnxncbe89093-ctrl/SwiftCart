@@ -3483,11 +3483,9 @@ async function renderAdminPage() {
               <p>Device ${escapeHtml(member.last_login_device || "Not captured yet")} · ${escapeHtml(member.last_login_browser || "Unknown browser")} on ${escapeHtml(member.last_login_platform || "Unknown platform")} · ${escapeHtml(member.last_login_method ? member.last_login_method.replaceAll("_", " ") : "Unknown method")}</p>
               <p>Last IP ${escapeHtml(member.last_login_ip || "Not captured yet")}</p>
               <p>${member.is_banned ? `Banned on ${formatCompactDateTime(member.banned_at)}${member.ban_reason ? ` · ${escapeHtml(member.ban_reason)}` : ""}` : "Account is active and allowed to shop."}</p>
-              <p>Password updated ${formatCompactDateTime(member.password_changed_at)} · Previous passwords ${member.previous_password_hashes?.length || 0}</p>
-              <p class="admin-sensitive-copy">Secure password hash: ${escapeHtml(member.password_hash || "Not available")}</p>
-              <p class="admin-sensitive-copy">Plaintext passwords are not stored and cannot be shown.</p>
+              <p>Password updated ${formatCompactDateTime(member.password_changed_at)} · Password history is protected server-side.</p>
+              <p class="admin-sensitive-copy">Plaintext passwords are not stored and password hashes are not exposed in the browser.</p>
               <p class="admin-sensitive-copy">Owner can edit user data, but the unique code is locked.</p>
-              ${member.previous_password_hashes?.length ? `<p class="admin-sensitive-copy">Previous password hashes: ${member.previous_password_hashes.map((hash) => escapeHtml(hash)).join(" | ")}</p>` : ""}
               ${member.address ? `<p>${member.address.street}, ${member.address.city}, ${member.address.state} ${member.address.pincode}</p>` : ""}
             </div>
             <div class="admin-actions">

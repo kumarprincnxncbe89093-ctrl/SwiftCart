@@ -7,12 +7,12 @@ from sqlalchemy import and_, inspect, or_, text
 from sqlalchemy.orm import joinedload
 from werkzeug.utils import secure_filename
 
+from backend.auth import require_authenticated_user
 from backend.models import (
     BASE_DIR,
     ChatMessage,
     CategoryDiscount,
     DATABASE_PATH,
-    OWNER_EMAIL,
     Category,
     Order,
     OrderItem,
@@ -22,7 +22,6 @@ from backend.models import (
     UserChangeLog,
     WishlistItem,
     engine,
-    get_password_history,
     serialize_order,
     serialize_product,
     serialize_user,
@@ -103,24 +102,16 @@ def _build_bank_offer(category_name: str, index: int) -> dict:
 
 
 def _require_owner(session):
-    user_id = request.args.get("user_id", type=int)
-    if not user_id:
-        return None, (jsonify({"message": "Owner user_id is required."}), 401)
-
-    user = session.query(User).filter(User.id == user_id).first()
-    if not user or user.account_type != "owner":
-        return None, (jsonify({"message": "Owner access only."}), 403)
+    user, error = require_authenticated_user(session, allowed_roles={"owner"})
+    if error:
+        return None, error
     return user, None
 
 
 def _require_merchant(session):
-    user_id = request.args.get("user_id", type=int)
-    if not user_id:
-        return None, (jsonify({"message": "Merchant user_id is required."}), 401)
-
-    user = session.query(User).filter(User.id == user_id).first()
-    if not user or user.account_type not in {"merchant", "seller"}:
-        return None, (jsonify({"message": "Merchant access only."}), 403)
+    user, error = require_authenticated_user(session, allowed_roles={"merchant", "seller"})
+    if error:
+        return None, error
     return user, None
 
 
@@ -464,11 +455,12 @@ def add_review(slug: str):
         if not product:
             return jsonify({"message": "Product not found"}), 404
 
-        author_user_id = payload.get("user_id")
-        author_user = session.query(User).filter(User.id == int(author_user_id)).first() if author_user_id else None
-        if author_user and author_user.is_banned:
-            reason = str(author_user.ban_reason or "").strip() or "Contact the owner for reactivation."
-            return jsonify({"message": f"Your account has been banned. {reason}", "force_logout": True}), 403
+        author_user = None
+        auth_header = request.headers.get("Authorization", "").strip() or request.headers.get("X-Auth-Token", "").strip()
+        if auth_header:
+            author_user, error = require_authenticated_user(session)
+            if error:
+                return error
 
         review = Review(
             product_id=product.id,
@@ -516,11 +508,10 @@ def add_review(slug: str):
 
 @products_bp.delete("/products/<slug>/reviews/<int:review_id>")
 def delete_review(slug: str, review_id: int):
-    user_id = request.args.get("user_id", type=int)
-    if not user_id:
-        return jsonify({"message": "user_id is required."}), 400
-
     with session_scope() as session:
+        current_user, error = require_authenticated_user(session)
+        if error:
+            return error
         product = session.query(Product).filter(Product.slug == slug).first()
         if not product:
             return jsonify({"message": "Product not found"}), 404
@@ -532,7 +523,7 @@ def delete_review(slug: str, review_id: int):
         )
         if not review:
             return jsonify({"message": "Review not found."}), 404
-        if review.author_user_id != user_id:
+        if review.author_user_id != current_user.id:
             return jsonify({"message": "You can only delete your own review."}), 403
 
         session.delete(review)
@@ -571,7 +562,10 @@ def chatbot_message():
 
     lowered = message.lower()
     with session_scope() as session:
-        user = session.query(User).filter(User.id == user_id).first() if user_id else None
+        user = None
+        auth_header = request.headers.get("Authorization", "").strip() or request.headers.get("X-Auth-Token", "").strip()
+        if auth_header:
+            user, _ = require_authenticated_user(session)
         first_name = user.first_name if user else "there"
         current_product = (
             session.query(Product)
@@ -1243,12 +1237,7 @@ def admin_dashboard():
             if len(members) > 1
         ]
 
-        user_payload = []
-        for member in all_users:
-            payload = serialize_user(member)
-            payload["password_hash"] = member.password_hash
-            payload["previous_password_hashes"] = get_password_history(member)
-            user_payload.append(payload)
+        user_payload = [serialize_user(member) for member in all_users]
 
         return jsonify(
             {

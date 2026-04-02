@@ -62,6 +62,9 @@ Edit `.env` and set:
 - `SECRET_KEY`
 - `DATABASE_URL`
 - optional Gunicorn worker settings
+- `ALLOWED_ORIGINS`
+- `OWNER_PASSWORD` before first production boot
+- OTP provider settings if you want real email or SMS verification
 
 Example:
 
@@ -74,6 +77,23 @@ GUNICORN_BIND=127.0.0.1:8000
 GUNICORN_WORKERS=4
 GUNICORN_THREADS=2
 ```
+
+Security-focused production settings:
+
+```env
+ALLOWED_ORIGINS=https://your-domain.com
+OWNER_EMAIL=owner@your-domain.com
+OWNER_PASSWORD=set-a-unique-long-password
+ENABLE_DEMO_MERCHANT=0
+ROTATE_SEEDED_PASSWORDS=0
+AUTH_TOKEN_MAX_AGE_SECONDS=604800
+```
+
+Notes:
+
+- Do not keep hardcoded owner or demo passwords in code or Railway variables screenshots.
+- Keep `ENABLE_DEMO_MERCHANT=0` unless you intentionally want a demo seller account.
+- SwiftCart now uses signed auth tokens for protected API routes, so users must log in again after deployment if they had an old local session stored in the browser.
 
 ## 6. Initialize the app once
 

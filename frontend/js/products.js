@@ -43,7 +43,16 @@ function saveStoredUser(user) {
     localStorage.removeItem(STORAGE_KEYS.user);
     return;
   }
-  localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(user));
+  const existingUser = getStoredUser();
+  const normalizedUser = {
+    ...(existingUser?.auth_token && !user.auth_token ? { auth_token: existingUser.auth_token } : {}),
+    ...user,
+  };
+  localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(normalizedUser));
+}
+
+function getAuthToken() {
+  return String(getStoredUser()?.auth_token || "").trim();
 }
 
 function getCart() {
@@ -119,9 +128,11 @@ function removeCartItem(productId) {
 
 async function apiFetch(path, options = {}) {
   const isFormData = options.body instanceof FormData;
+  const authToken = getAuthToken();
   const response = await fetch(`${API_BASE}${path}`, {
     headers: {
       ...(isFormData ? {} : { "Content-Type": "application/json" }),
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
       ...(options.headers || {})
     },
     ...options
@@ -136,6 +147,13 @@ async function apiFetch(path, options = {}) {
   }
 
   if (!response.ok) {
+    if (response.status === 401 && authToken) {
+      setAuthFlashMessage(data?.message || "Your session has expired. Please login again.");
+      saveStoredUser(null);
+      if (!window.location.pathname.toLowerCase().endsWith("login.html")) {
+        redirectToPage("Login.html");
+      }
+    }
     if (data?.force_logout) {
       setAuthFlashMessage(data?.message || "Your session is no longer active.");
       saveStoredUser(null);
