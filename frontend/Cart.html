@@ -58,6 +58,7 @@
 
     <aside class="summary-card">
       <h3>Order Summary</h3>
+      <div id="cartSummaryMeta" class="summary-meta-stack"></div>
       <div class="summary-row">
         <span>Subtotal</span>
         <strong id="cartSubtotal">₹0</strong>
@@ -66,11 +67,19 @@
         <span>Delivery</span>
         <strong>₹50</strong>
       </div>
+      <div class="summary-row">
+        <span>You Save</span>
+        <strong id="cartSavings">₹0</strong>
+      </div>
       <div class="summary-total">
         <span>Total</span>
         <strong id="cartTotal">₹0</strong>
       </div>
-      <a class="buybtn inline-button" href="Payment.html">Proceed to Payment</a>
+      <p id="cartCheckoutStatus" class="status-copy"></p>
+      <div class="inline-actions">
+        <button id="cartFixIssuesButton" class="ghost-button inline-button" type="button">Fix Cart Issues</button>
+        <button id="cartCheckoutButton" class="buybtn inline-button" type="button">Proceed to Payment</button>
+      </div>
     </aside>
   </main>
 

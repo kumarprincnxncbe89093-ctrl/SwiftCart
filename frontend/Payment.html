@@ -103,12 +103,17 @@
         <img src="images/Payment.jpeg" alt="SwiftCart payment QR code" class="payment-qr-image">
         <p class="status-copy">Scan this QR for UPI payment while completing checkout.</p>
       </div>
+      <div class="checkout-trust-card">
+        <p class="eyebrow">Why This Checkout Feels Production Ready</p>
+        <div id="checkoutTrustList" class="checkout-trust-list"></div>
+      </div>
       <button class="pay-btn" id="payNowButton" type="button">Pay Now</button>
       <p id="paymentStatus" class="status-copy"></p>
     </section>
 
     <aside class="order-summary">
       <p class="eyebrow">Order Summary</p>
+      <div id="paymentSummaryMeta" class="summary-meta-stack"></div>
       <div id="paymentItems"></div>
       <div class="summary-row">
         <span>Subtotal</span>
@@ -117,6 +122,10 @@
       <div class="summary-row">
         <span>Delivery</span>
         <strong>₹50</strong>
+      </div>
+      <div class="summary-row">
+        <span>You Save</span>
+        <strong id="paymentSavings">₹0</strong>
       </div>
       <div class="summary-total">
         <span>Total</span>

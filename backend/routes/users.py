@@ -44,6 +44,37 @@ def _sentence_case(value: str) -> str:
     return cleaned[:1].upper() + cleaned[1:]
 
 
+def _require_owner(session):
+    user_id = request.args.get("user_id", type=int)
+    if not user_id:
+        return None, (jsonify({"message": "Owner user_id is required."}), 401)
+
+    user = session.query(User).filter(User.id == user_id).first()
+    if not user or user.account_type != "owner":
+        return None, (jsonify({"message": "Owner access only."}), 403)
+    return user, None
+
+
+def _banned_account_response(user: User):
+    reason = str(user.ban_reason or "").strip() or "Contact the owner for reactivation."
+    return (
+        jsonify(
+            {
+                "message": f"Your account has been banned. {reason}",
+                "is_banned": True,
+                "force_logout": True,
+            }
+        ),
+        403,
+    )
+
+
+def _ensure_user_is_active(user: User):
+    if user and user.is_banned:
+        return _banned_account_response(user)
+    return None
+
+
 def _next_address_label(user: User) -> str:
     existing_labels = {address.label.strip().lower() for address in user.addresses if address.label}
     defaults = ["Home", "Work", "Office", "Family", "Other"]
@@ -235,14 +266,20 @@ def request_otp():
                 existing_user = session.query(User).filter(User.email == email).first()
                 if not existing_user:
                     return jsonify({"message": "No account found for this email."}), 404
+                banned_error = _ensure_user_is_active(existing_user)
+                if banned_error:
+                    return banned_error
                 mobile = _normalize_mobile(existing_user.mobile)
                 linked_accounts = [serialize_user(existing_user)]
             elif mobile:
                 users = _find_users_by_mobile(session, mobile)
                 if not users:
                     return jsonify({"message": "No account found for this mobile number."}), 404
-                linked_accounts = [serialize_user(user) for user in users]
-                email = users[0].email
+                active_users = [user for user in users if not user.is_banned]
+                if not active_users:
+                    return _banned_account_response(users[0])
+                linked_accounts = [serialize_user(user) for user in active_users]
+                email = active_users[0].email
             else:
                 return jsonify({"message": f"Provide email or mobile number for {purpose} OTP."}), 400
 
@@ -322,19 +359,25 @@ def login_with_otp():
             matching_users = _find_users_by_mobile(session, mobile)
             if not matching_users:
                 return jsonify({"message": "User not found."}), 404
-            if len(matching_users) > 1 and not user_id:
+            active_users = [item for item in matching_users if not item.is_banned]
+            if not active_users:
+                return _banned_account_response(matching_users[0])
+            if len(active_users) > 1 and not user_id:
                 return jsonify(
                     {
                         "message": "Multiple accounts use this mobile number. Choose one account.",
-                        "linked_accounts": [serialize_user(user) for user in matching_users],
+                        "linked_accounts": [serialize_user(user) for user in active_users],
                     }
                 ), 409
             if user_id:
-                user = next((item for item in matching_users if item.id == int(user_id)), None)
+                user = next((item for item in active_users if item.id == int(user_id)), None)
             else:
-                user = matching_users[0]
+                user = active_users[0]
         if not user:
             return jsonify({"message": "User not found."}), 404
+        banned_error = _ensure_user_is_active(user)
+        if banned_error:
+            return banned_error
 
         otp.consumed_at = datetime.utcnow()
         _stamp_login_context(user, method="otp_login")
@@ -383,20 +426,26 @@ def reset_password_with_otp():
             matching_users = _find_users_by_mobile(session, mobile)
             if not matching_users:
                 return jsonify({"message": "User not found."}), 404
-            if len(matching_users) > 1 and not user_id:
+            active_users = [item for item in matching_users if not item.is_banned]
+            if not active_users:
+                return _banned_account_response(matching_users[0])
+            if len(active_users) > 1 and not user_id:
                 return jsonify(
                     {
                         "message": "Multiple accounts use this mobile number. Choose one account.",
-                        "linked_accounts": [serialize_user(user) for user in matching_users],
+                        "linked_accounts": [serialize_user(user) for user in active_users],
                     }
                 ), 409
             if user_id:
-                user = next((item for item in matching_users if item.id == int(user_id)), None)
+                user = next((item for item in active_users if item.id == int(user_id)), None)
             else:
-                user = matching_users[0]
+                user = active_users[0]
 
         if not user:
             return jsonify({"message": "User not found."}), 404
+        banned_error = _ensure_user_is_active(user)
+        if banned_error:
+            return banned_error
         if check_password_hash(user.password_hash, new_password):
             return jsonify({"message": "Choose a different password from the current one."}), 400
 
@@ -509,6 +558,9 @@ def login():
         user = session.query(User).filter(User.email == email).first()
         if not user or not check_password_hash(user.password_hash, password):
             return jsonify({"message": "Invalid email or password."}), 401
+        banned_error = _ensure_user_is_active(user)
+        if banned_error:
+            return banned_error
 
         _stamp_login_context(user, method="password_login")
         return jsonify(
@@ -537,6 +589,9 @@ def change_password(user_id: int):
         user = session.query(User).filter(User.id == user_id).first()
         if not user:
             return jsonify({"message": "User not found."}), 404
+        banned_error = _ensure_user_is_active(user)
+        if banned_error:
+            return banned_error
         if not check_password_hash(user.password_hash, current_password):
             return jsonify({"message": "Current password is incorrect."}), 400
         if check_password_hash(user.password_hash, new_password):
@@ -580,6 +635,9 @@ def update_profile(user_id: int):
         user = session.query(User).filter(User.id == user_id).first()
         if not user:
             return jsonify({"message": "User not found"}), 404
+        banned_error = _ensure_user_is_active(user)
+        if banned_error:
+            return banned_error
 
         next_email = payload.get("email", user.email).strip().lower()
         if not next_email or "@" not in next_email:
@@ -629,6 +687,9 @@ def update_address(user_id: int):
         user = session.query(User).filter(User.id == user_id).first()
         if not user:
             return jsonify({"message": "User not found."}), 404
+        banned_error = _ensure_user_is_active(user)
+        if banned_error:
+            return banned_error
 
         address = next((item for item in user.addresses if item.is_default), None) or (user.addresses[0] if user.addresses else Address(user_id=user.id))
         if not user.addresses:
@@ -666,6 +727,9 @@ def add_address(user_id: int):
         user = session.query(User).filter(User.id == user_id).first()
         if not user:
             return jsonify({"message": "User not found."}), 404
+        banned_error = _ensure_user_is_active(user)
+        if banned_error:
+            return banned_error
 
         make_default = bool(payload.get("is_default")) or not user.addresses
         if make_default:
@@ -702,6 +766,9 @@ def update_saved_address(user_id: int, address_id: int):
         user = session.query(User).filter(User.id == user_id).first()
         if not user:
             return jsonify({"message": "User not found."}), 404
+        banned_error = _ensure_user_is_active(user)
+        if banned_error:
+            return banned_error
         address = next((item for item in user.addresses if item.id == address_id), None)
         if not address:
             return jsonify({"message": "Address not found."}), 404
@@ -722,6 +789,9 @@ def set_default_address(user_id: int, address_id: int):
         user = session.query(User).filter(User.id == user_id).first()
         if not user:
             return jsonify({"message": "User not found."}), 404
+        banned_error = _ensure_user_is_active(user)
+        if banned_error:
+            return banned_error
         address = next((item for item in user.addresses if item.id == address_id), None)
         if not address:
             return jsonify({"message": "Address not found."}), 404
@@ -747,6 +817,9 @@ def delete_saved_address(user_id: int, address_id: int):
         user = session.query(User).filter(User.id == user_id).first()
         if not user:
             return jsonify({"message": "User not found."}), 404
+        banned_error = _ensure_user_is_active(user)
+        if banned_error:
+            return banned_error
         address = next((item for item in user.addresses if item.id == address_id), None)
         if not address:
             return jsonify({"message": "Address not found."}), 404
@@ -805,6 +878,9 @@ def upload_profile_image(user_id: int):
         user = session.query(User).filter(User.id == user_id).first()
         if not user:
             return jsonify({"message": "User not found."}), 404
+        banned_error = _ensure_user_is_active(user)
+        if banned_error:
+            return banned_error
         log_user_change(
             session,
             user_id=user.id,
@@ -825,6 +901,9 @@ def remove_profile_image(user_id: int):
         user = session.query(User).filter(User.id == user_id).first()
         if not user:
             return jsonify({"message": "User not found."}), 404
+        banned_error = _ensure_user_is_active(user)
+        if banned_error:
+            return banned_error
         log_user_change(
             session,
             user_id=user.id,
@@ -860,6 +939,12 @@ def add_to_wishlist(user_id: int):
         return jsonify({"message": "product_id is required"}), 400
 
     with session_scope() as session:
+        user = session.query(User).filter(User.id == user_id).first()
+        if not user:
+            return jsonify({"message": "User not found."}), 404
+        banned_error = _ensure_user_is_active(user)
+        if banned_error:
+            return banned_error
         existing = (
             session.query(WishlistItem)
             .filter(WishlistItem.user_id == user_id, WishlistItem.product_id == product_id)
@@ -875,6 +960,12 @@ def add_to_wishlist(user_id: int):
 @users_bp.delete("/users/<int:user_id>/wishlist/<int:product_id>")
 def remove_from_wishlist(user_id: int, product_id: int):
     with session_scope() as session:
+        user = session.query(User).filter(User.id == user_id).first()
+        if not user:
+            return jsonify({"message": "User not found."}), 404
+        banned_error = _ensure_user_is_active(user)
+        if banned_error:
+            return banned_error
         item = (
             session.query(WishlistItem)
             .filter(WishlistItem.user_id == user_id, WishlistItem.product_id == product_id)
@@ -885,3 +976,78 @@ def remove_from_wishlist(user_id: int, product_id: int):
 
         session.delete(item)
         return jsonify({"message": "Removed from wishlist."})
+
+
+@users_bp.post("/admin/users/<int:target_user_id>/ban")
+def admin_ban_user(target_user_id: int):
+    payload = request.get_json(silent=True) or {}
+    reason = _sentence_case(payload.get("reason", "")) or "Owner disabled this account."
+
+    with session_scope() as session:
+        owner, error = _require_owner(session)
+        if error:
+            return error
+
+        user = session.query(User).filter(User.id == target_user_id).first()
+        if not user:
+            return jsonify({"message": "User not found."}), 404
+        if user.account_type == "owner":
+            return jsonify({"message": "The owner account cannot be banned."}), 403
+
+        previous_status = "Banned" if user.is_banned else "Active"
+        log_user_change(
+            session,
+            user_id=user.id,
+            field_name="account_status",
+            old_value=previous_status,
+            new_value=f"Banned: {reason}",
+            changed_by=f"owner:{owner.id}",
+        )
+        user.is_banned = True
+        user.ban_reason = reason
+        user.banned_at = datetime.utcnow()
+        user.banned_by_user_id = owner.id
+        session.flush()
+        session.refresh(user)
+        return jsonify(
+            {
+                "message": f"{user.first_name} has been banned successfully.",
+                "user": serialize_user(user),
+            }
+        )
+
+
+@users_bp.post("/admin/users/<int:target_user_id>/unban")
+def admin_unban_user(target_user_id: int):
+    with session_scope() as session:
+        owner, error = _require_owner(session)
+        if error:
+            return error
+
+        user = session.query(User).filter(User.id == target_user_id).first()
+        if not user:
+            return jsonify({"message": "User not found."}), 404
+        if user.account_type == "owner":
+            return jsonify({"message": "The owner account is always active."}), 403
+
+        previous_status = f"Banned: {user.ban_reason}" if user.is_banned else "Active"
+        log_user_change(
+            session,
+            user_id=user.id,
+            field_name="account_status",
+            old_value=previous_status,
+            new_value="Active",
+            changed_by=f"owner:{owner.id}",
+        )
+        user.is_banned = False
+        user.ban_reason = ""
+        user.banned_at = None
+        user.banned_by_user_id = owner.id
+        session.flush()
+        session.refresh(user)
+        return jsonify(
+            {
+                "message": f"{user.first_name} has been unbanned successfully.",
+                "user": serialize_user(user),
+            }
+        )

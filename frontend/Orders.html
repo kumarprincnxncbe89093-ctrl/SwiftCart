@@ -43,6 +43,24 @@
                     <h2>Track purchases and recent checkouts</h2>
                 </div>
             </div>
+            <section class="orders-utility-bar">
+                <div id="orderStats" class="order-stats-grid"></div>
+                <div class="orders-toolbar">
+                    <input id="orderSearchInput" type="search" placeholder="Search by order ID, product name, or status">
+                    <select id="orderStatusFilter">
+                        <option value="all">All Orders</option>
+                        <option value="Placed">Placed</option>
+                        <option value="Confirmed">Confirmed</option>
+                        <option value="Packed">Packed</option>
+                        <option value="Shipped">Shipped</option>
+                        <option value="Out for Delivery">Out for Delivery</option>
+                        <option value="Delivered">Delivered</option>
+                        <option value="Partially Cancelled">Partially Cancelled</option>
+                        <option value="Cancelled">Cancelled</option>
+                    </select>
+                </div>
+                <p id="ordersStatus" class="status-copy"></p>
+            </section>
             <div id="ordersList" class="cart-items"></div>
         </section>
 

@@ -195,6 +195,21 @@
     box-shadow:0 12px 24px rgba(15, 23, 42, 0.12);
 }
 
+.checkout-trust-card{
+    margin-top:18px;
+    padding:18px;
+    border:1px solid #e2e8f0;
+    border-radius:20px;
+    background:linear-gradient(180deg, #ffffff, #f8fafc);
+}
+
+.checkout-trust-list{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    margin-top:10px;
+}
+
 .payment-processing-overlay{
     position:fixed;
     inset:0;

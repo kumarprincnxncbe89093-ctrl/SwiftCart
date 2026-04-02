@@ -21,6 +21,22 @@ def _sentence_case(value: str) -> str:
     return cleaned[:1].upper() + cleaned[1:]
 
 
+def _ensure_active_user(user: User):
+    if user and user.is_banned:
+        reason = str(user.ban_reason or "").strip() or "Contact the owner for reactivation."
+        return (
+            jsonify(
+                {
+                    "message": f"Your account has been banned. {reason}",
+                    "is_banned": True,
+                    "force_logout": True,
+                }
+            ),
+            403,
+        )
+    return None
+
+
 def _recalculate_order_totals(order: Order) -> None:
     active_items = [item for item in order.items if (item.status or "Placed").lower() != "cancelled"]
     order.total_amount = (
@@ -62,21 +78,37 @@ def checkout():
         user = session.query(User).filter(User.id == user_id).first()
         if not user:
             return jsonify({"message": "User not found"}), 404
+        banned_error = _ensure_active_user(user)
+        if banned_error:
+            return banned_error
+
+        requested_quantities: dict[int, int] = {}
+        for item in items:
+            product_id = int(item["product_id"])
+            quantity = max(int(item.get("quantity", 1)), 1)
+            requested_quantities[product_id] = requested_quantities.get(product_id, 0) + quantity
 
         product_map = {
             product.id: product
             for product in session.query(Product).filter(
-                Product.id.in_([item["product_id"] for item in items])
+                Product.id.in_(requested_quantities.keys())
             )
         }
         total = 0.0
         order_items = []
-        for item in items:
-            product = product_map.get(item["product_id"])
+        for product_id, quantity in requested_quantities.items():
+            product = product_map.get(product_id)
             if not product:
-                return jsonify({"message": f"Product {item['product_id']} not found"}), 404
+                return jsonify({"message": f"Product {product_id} not found"}), 404
+            if product.stock <= 0:
+                return jsonify({"message": f"{product.name} is out of stock right now."}), 409
+            if quantity > product.stock:
+                return jsonify(
+                    {
+                        "message": f"Only {product.stock} unit(s) of {product.name} are available right now.",
+                    }
+                ), 409
 
-            quantity = max(int(item.get("quantity", 1)), 1)
             total += product.price * quantity
             order_items.append((product, quantity))
 
@@ -137,6 +169,7 @@ def checkout():
         session.flush()
 
         for product, quantity in order_items:
+            product.stock = max(0, int(product.stock or 0) - quantity)
             session.add(
                 OrderItem(
                     order_id=order.id,
@@ -202,6 +235,8 @@ def cancel_order(order_id: int):
         order.cancel_reason = reason
         order.canceled_at = datetime.utcnow()
         for item in order.items:
+            if (item.status or "Placed").lower() != "cancelled" and item.product:
+                item.product.stock = max(0, int(item.product.stock or 0)) + int(item.quantity or 0)
             item.status = "Cancelled"
             item.cancel_reason = reason
             item.canceled_at = order.canceled_at
@@ -247,6 +282,8 @@ def cancel_order_item(order_id: int, order_item_id: int):
         if (target_item.status or "Placed").lower() == "cancelled":
             return jsonify({"message": "This product is already cancelled."}), 400
 
+        if target_item.product:
+            target_item.product.stock = max(0, int(target_item.product.stock or 0)) + int(target_item.quantity or 0)
         target_item.status = "Cancelled"
         target_item.cancel_reason = reason
         target_item.canceled_at = datetime.utcnow()
