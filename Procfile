@@ -1,1 +1,1 @@
-web: gunicorn -c gunicorn.conf.py wsgi:application
+web: sh start.sh

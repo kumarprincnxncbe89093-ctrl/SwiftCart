@@ -13,4 +13,4 @@ cmds = [
 ]
 
 [start]
-cmd = "gunicorn -c gunicorn.conf.py wsgi:application"
+cmd = "sh start.sh"

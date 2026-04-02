@@ -201,6 +201,19 @@ sudo certbot --nginx -d your-domain.com
 - The app already has a health endpoint at `/api/health`.
 - Profile uploads are stored inside `frontend/uploads/profiles`.
 
+## Railway quick fix
+
+If you deploy on Railway, do not set `DATABASE_URL` to placeholder text such as
+`postgresql+psycopg://USER:PASSWORD@HOST:5432/DBNAME`.
+
+Use one of these instead:
+
+- `DATABASE_URL=${{Postgres.DATABASE_URL}}` where `Postgres` is your Railway database service name
+- shared/reference variables for `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, and `PGDATABASE`
+
+The app now supports both styles and will ignore the placeholder example if it slips into your Railway variables.
+The deployment entrypoint also strips the placeholder value before Gunicorn starts, so the app can use Railway reference vars when they are available.
+
 ## 13. Quick production start summary
 
 ```bash

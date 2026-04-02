@@ -6,7 +6,7 @@ services:
     region: oregon
     autoDeploy: true
     buildCommand: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
-    startCommand: gunicorn -c gunicorn.conf.py wsgi:application
+    startCommand: sh start.sh
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9

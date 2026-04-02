@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import random
 from contextlib import contextmanager
@@ -9,6 +10,7 @@ from pathlib import Path
 from re import sub
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, create_engine, event, text
+from sqlalchemy.engine import URL
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
 from werkzeug.security import generate_password_hash
 
@@ -18,10 +20,11 @@ from backend.imported_product_benchmarks import IMPORTED_PRODUCT_MARKET_DATA
 BASE_DIR = Path(__file__).resolve().parent
 DATABASE_PATH = BASE_DIR / "database.db"
 DEFAULT_SQLITE_URL = f"sqlite:///{DATABASE_PATH}"
+logger = logging.getLogger(__name__)
 
 
 def _normalize_database_url(raw_url: str | None) -> str:
-    url = (raw_url or DEFAULT_SQLITE_URL).strip()
+    url = (raw_url or "").strip()
     if "\n" in url:
         url = url.splitlines()[0].strip()
     for marker in (
@@ -48,7 +51,62 @@ def _normalize_database_url(raw_url: str | None) -> str:
     return url
 
 
-DATABASE_URL = _normalize_database_url(os.getenv("DATABASE_URL"))
+def _looks_like_placeholder_database_url(url: str) -> bool:
+    lowered = url.lower()
+    placeholder_tokens = ("user", "password", "host", "dbname")
+    return all(token in lowered for token in placeholder_tokens)
+
+
+def _build_database_url_from_pg_env() -> str | None:
+    host = (os.getenv("PGHOST") or "").strip()
+    port = (os.getenv("PGPORT") or "").strip()
+    user = (os.getenv("PGUSER") or "").strip()
+    password = (os.getenv("PGPASSWORD") or "").strip()
+    database = (os.getenv("PGDATABASE") or "").strip()
+
+    if not all((host, port, user, password, database)):
+        return None
+
+    try:
+        port_value = int(port)
+    except ValueError:
+        logger.warning("Ignoring PGHOST/PGPORT variables because PGPORT is not a valid integer.")
+        return None
+
+    return URL.create(
+        "postgresql+psycopg",
+        username=user,
+        password=password,
+        host=host,
+        port=port_value,
+        database=database,
+    ).render_as_string(hide_password=False)
+
+
+def _resolve_database_url() -> str:
+    raw_database_url = _normalize_database_url(os.getenv("DATABASE_URL"))
+    if raw_database_url and not _looks_like_placeholder_database_url(raw_database_url):
+        return raw_database_url
+
+    for env_key in ("DATABASE_PRIVATE_URL", "DATABASE_PUBLIC_URL"):
+        candidate = _normalize_database_url(os.getenv(env_key))
+        if candidate:
+            return candidate
+
+    built_from_pg_env = _build_database_url_from_pg_env()
+    if built_from_pg_env:
+        return built_from_pg_env
+
+    if raw_database_url and _looks_like_placeholder_database_url(raw_database_url):
+        logger.warning(
+            "Ignoring placeholder DATABASE_URL value. On Railway, set DATABASE_URL to a "
+            "reference like ${{Postgres.DATABASE_URL}} or expose PGHOST/PGPORT/PGUSER/PGPASSWORD/PGDATABASE."
+        )
+
+    return DEFAULT_SQLITE_URL
+
+
+DATABASE_URL = _resolve_database_url()
 OWNER_EMAIL = "princekumar123pr17@gmail.com"
 OWNER_PASSWORD = "172388Pr@"
 MERCHANT_DEMO_EMAIL = "merchant@swiftcart.com"
