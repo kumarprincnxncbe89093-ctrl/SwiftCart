@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 
 from flask import Flask, jsonify, request, send_from_directory
+from sqlalchemy.exc import DBAPIError, OperationalError
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from backend.models import init_db
@@ -35,6 +37,7 @@ CONTENT_SECURITY_POLICY = "; ".join(
         "frame-ancestors 'none'",
     ]
 )
+logger = logging.getLogger(__name__)
 
 
 def create_app() -> Flask:
@@ -43,14 +46,49 @@ def create_app() -> Flask:
     app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
     app.config["ENV_NAME"] = os.getenv("FLASK_ENV", "production")
     app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "swiftcart-dev-secret")
+    app.config["DB_READY"] = False
+    app.config["DB_INIT_ERROR"] = ""
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
     UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
-    init_db()
+    try:
+        init_db()
+        app.config["DB_READY"] = True
+    except Exception as exc:
+        app.config["DB_READY"] = False
+        app.config["DB_INIT_ERROR"] = str(exc)
+        logger.exception("SwiftCart started without a ready database connection.")
 
     app.register_blueprint(products_bp, url_prefix="/api")
     app.register_blueprint(users_bp, url_prefix="/api")
     app.register_blueprint(orders_bp, url_prefix="/api")
+
+    def database_unavailable_response():
+        message = "SwiftCart cannot reach the database right now. Please try again shortly."
+        if not app.config.get("DB_INIT_ERROR"):
+            message = "SwiftCart is starting up. Please try again in a moment."
+        return (
+            jsonify(
+                {
+                    "message": message,
+                    "status": "database_unavailable",
+                    "service": "SwiftCart API",
+                }
+            ),
+            503,
+        )
+
+    @app.before_request
+    def gate_api_when_database_is_unavailable():
+        if request.method == "OPTIONS":
+            return None
+        if not request.path.startswith("/api"):
+            return None
+        if request.path == "/api/health":
+            return None
+        if app.config.get("DB_READY"):
+            return None
+        return database_unavailable_response()
 
     @app.after_request
     def add_headers(response):
@@ -78,7 +116,23 @@ def create_app() -> Flask:
 
     @app.get("/api/health")
     def health():
-        return jsonify({"status": "ok", "service": "SwiftCart API"})
+        is_ready = bool(app.config.get("DB_READY"))
+        payload = {
+            "status": "ok" if is_ready else "degraded",
+            "service": "SwiftCart API",
+            "database_ready": is_ready,
+        }
+        if not is_ready and app.config.get("DB_INIT_ERROR"):
+            payload["database_error"] = app.config["DB_INIT_ERROR"]
+        return jsonify(payload), (200 if is_ready else 503)
+
+    @app.errorhandler(OperationalError)
+    @app.errorhandler(DBAPIError)
+    def handle_database_error(error):
+        logger.exception("Database request failed: %s", error)
+        if request.path.startswith("/api"):
+            return database_unavailable_response()
+        return send_from_directory(FRONTEND_DIR, "index.html")
 
     @app.get("/")
     def root():

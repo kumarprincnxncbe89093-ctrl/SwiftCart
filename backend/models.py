@@ -23,6 +23,15 @@ DEFAULT_SQLITE_URL = f"sqlite:///{DATABASE_PATH}"
 logger = logging.getLogger(__name__)
 
 
+def _env_int(name: str, default: int) -> int:
+    raw_value = str(os.getenv(name, str(default))).strip()
+    try:
+        return int(raw_value)
+    except ValueError:
+        logger.warning("Invalid integer for %s=%r. Falling back to %s.", name, raw_value, default)
+        return default
+
+
 def _normalize_database_url(raw_url: str | None) -> str:
     url = (raw_url or "").strip()
     if "\n" in url:
@@ -124,9 +133,9 @@ if DATABASE_URL.startswith("sqlite"):
 else:
     SQLALCHEMY_ENGINE_KWARGS.update(
         {
-            "pool_size": int(os.getenv("DB_POOL_SIZE", "12")),
-            "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "24")),
-            "pool_recycle": int(os.getenv("DB_POOL_RECYCLE", "1800")),
+            "pool_size": _env_int("DB_POOL_SIZE", 12),
+            "max_overflow": _env_int("DB_MAX_OVERFLOW", 24),
+            "pool_recycle": _env_int("DB_POOL_RECYCLE", 1800),
         }
     )
 

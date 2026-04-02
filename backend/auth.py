@@ -9,7 +9,17 @@ from backend.models import User
 
 
 AUTH_TOKEN_SALT = "swiftcart-auth-token"
-AUTH_TOKEN_MAX_AGE_SECONDS = int(os.getenv("AUTH_TOKEN_MAX_AGE_SECONDS", "604800"))
+
+
+def _env_int(name: str, default: int) -> int:
+    raw_value = str(os.getenv(name, str(default))).strip()
+    try:
+        return int(raw_value)
+    except ValueError:
+        return default
+
+
+AUTH_TOKEN_MAX_AGE_SECONDS = _env_int("AUTH_TOKEN_MAX_AGE_SECONDS", 604800)
 
 
 def _secret_key() -> str:
