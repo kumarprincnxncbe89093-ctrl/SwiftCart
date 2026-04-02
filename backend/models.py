@@ -11,6 +11,7 @@ from re import sub
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, create_engine, event, text
 from sqlalchemy.engine import URL
+from sqlalchemy.exc import ArgumentError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
 from werkzeug.security import generate_password_hash
 
@@ -63,7 +64,13 @@ def _normalize_database_url(raw_url: str | None) -> str:
 def _looks_like_placeholder_database_url(url: str) -> bool:
     lowered = url.lower()
     placeholder_tokens = ("user", "password", "host", "dbname")
-    return all(token in lowered for token in placeholder_tokens)
+    if all(token in lowered for token in placeholder_tokens):
+        return True
+    return (
+        url.startswith("${{")
+        or url.startswith("{{")
+        or ("railway.internal" in lowered and "@" not in url)
+    )
 
 
 def _build_database_url_from_pg_env() -> str | None:
@@ -139,7 +146,26 @@ else:
         }
     )
 
-engine = create_engine(DATABASE_URL, **SQLALCHEMY_ENGINE_KWARGS)
+def _create_engine_with_fallback(database_url: str):
+    try:
+        return create_engine(database_url, **SQLALCHEMY_ENGINE_KWARGS), database_url
+    except (ArgumentError, ValueError) as exc:
+        if database_url == DEFAULT_SQLITE_URL:
+            raise
+        logger.warning(
+            "Invalid DATABASE_URL %r. Falling back to local SQLite so the app can boot: %s",
+            database_url,
+            exc,
+        )
+        fallback_kwargs = {
+            "future": True,
+            "pool_pre_ping": True,
+            "connect_args": {"check_same_thread": False},
+        }
+        return create_engine(DEFAULT_SQLITE_URL, **fallback_kwargs), DEFAULT_SQLITE_URL
+
+
+engine, ACTIVE_DATABASE_URL = _create_engine_with_fallback(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 _db_initialized = False
 
@@ -150,7 +176,7 @@ def _uses_sqlite() -> bool:
 
 @event.listens_for(engine, "connect")
 def _set_sqlite_pragmas(dbapi_connection, _connection_record):
-    if not DATABASE_URL.startswith("sqlite"):
+    if not ACTIVE_DATABASE_URL.startswith("sqlite"):
         return
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA journal_mode=WAL;")
