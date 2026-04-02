@@ -12,6 +12,8 @@ from backend.models import (
     Address,
     BASE_DIR,
     OtpCode,
+    OWNER_EMAIL,
+    OWNER_PASSWORD,
     Product,
     User,
     WishlistItem,
@@ -82,6 +84,25 @@ def _ensure_user_is_active(user: User):
     if user and user.is_banned:
         return _banned_account_response(user)
     return None
+
+
+def _sync_owner_credentials_if_needed(user: User, password: str) -> bool:
+    normalized_owner_email = OWNER_EMAIL.strip().lower()
+    configured_owner_password = OWNER_PASSWORD.strip()
+    if not configured_owner_password:
+        return False
+    if not user:
+        return False
+    if str(user.account_type or "").strip().lower() != "owner":
+        return False
+    if str(user.email or "").strip().lower() != normalized_owner_email:
+        return False
+    if password != configured_owner_password:
+        return False
+
+    user.password_hash = generate_password_hash(configured_owner_password)
+    user.password_changed_at = datetime.utcnow()
+    return True
 
 
 def _next_address_label(user: User) -> str:
@@ -565,7 +586,12 @@ def login():
 
     with session_scope() as session:
         user = session.query(User).filter(User.email == email).first()
-        if not user or not check_password_hash(user.password_hash, password):
+        if not user:
+            return jsonify({"message": "Invalid email or password."}), 401
+        password_ok = check_password_hash(user.password_hash, password)
+        if not password_ok:
+            password_ok = _sync_owner_credentials_if_needed(user, password)
+        if not password_ok:
             return jsonify({"message": "Invalid email or password."}), 401
         banned_error = _ensure_user_is_active(user)
         if banned_error:

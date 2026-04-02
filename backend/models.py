@@ -1480,10 +1480,14 @@ def ensure_owner_account() -> None:
             .first()
         )
         if owner:
+            previous_role = str(owner.account_type or "").strip().lower()
+            previous_email = owner.email.strip().lower()
             owner.account_type = "owner"
             should_rotate_password = False
-            if owner.email.strip().lower() == "owner@swiftcart.com":
+            if previous_email != OWNER_EMAIL.lower():
                 owner.email = OWNER_EMAIL
+                should_rotate_password = True
+            if previous_role != "owner":
                 should_rotate_password = True
             if should_rotate_password or ROTATE_SEEDED_PASSWORDS:
                 owner.password_hash = generate_password_hash(OWNER_PASSWORD)
