@@ -108,7 +108,11 @@ def create_app() -> Flask:
         forwarded_proto = request.headers.get("X-Forwarded-Proto", "")
         if request.is_secure or "https" in forwarded_proto.lower():
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-        if request.path.startswith("/api") or response.mimetype == "text/html":
+        if (
+            request.path.startswith("/api")
+            or response.mimetype in {"text/html", "text/css", "application/javascript", "text/javascript"}
+            or request.path.endswith((".html", ".css", ".js"))
+        ):
             response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
             response.headers["Pragma"] = "no-cache"
             response.headers["Expires"] = "0"

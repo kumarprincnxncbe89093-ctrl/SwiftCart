@@ -25,6 +25,7 @@ const state = {
     tables: false
   }
 };
+const HOME_CACHE_KEY = "swiftcart-home-cache-v1";
 
 function setStatus(node, message, tone = "neutral") {
   if (!node) return;
@@ -43,6 +44,74 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function normalizeHomePayload(payload = {}) {
+  return {
+    hero: {
+      title: payload?.hero?.title || "SwiftCart Marketplace",
+      subtitle: payload?.hero?.subtitle || "Discover fashion, footwear, and accessories with richer product data and real checkout flows.",
+      highlight: payload?.hero?.highlight || "Daily deals and premium selections updated from the catalog.",
+    },
+    categories: Array.isArray(payload?.categories) ? payload.categories : [],
+    featured_products: Array.isArray(payload?.featured_products) ? payload.featured_products : [],
+    deal_of_the_day: Array.isArray(payload?.deal_of_the_day) ? payload.deal_of_the_day : [],
+    imported_products: Array.isArray(payload?.imported_products) ? payload.imported_products : [],
+    new_arrivals: Array.isArray(payload?.new_arrivals) ? payload.new_arrivals : [],
+  };
+}
+
+function hasAnyHomeProducts(payload) {
+  return [
+    payload?.featured_products,
+    payload?.deal_of_the_day,
+    payload?.imported_products,
+    payload?.new_arrivals,
+  ].some((items) => Array.isArray(items) && items.length > 0);
+}
+
+function cacheHomePayload(payload) {
+  try {
+    localStorage.setItem(HOME_CACHE_KEY, JSON.stringify(normalizeHomePayload(payload)));
+  } catch {
+    // Ignore localStorage write failures.
+  }
+}
+
+function getCachedHomePayload() {
+  try {
+    const raw = localStorage.getItem(HOME_CACHE_KEY);
+    return raw ? normalizeHomePayload(JSON.parse(raw)) : null;
+  } catch {
+    return null;
+  }
+}
+
+function dedupeProductsById(products = []) {
+  return Array.from(new Map((products || []).filter(Boolean).map((item) => [item.id, item])).values());
+}
+
+function buildFallbackHomePayload(categories = [], products = []) {
+  const catalog = dedupeProductsById(products);
+  const newest = [...catalog].sort((left, right) => {
+    const rightTime = new Date(right?.created_at || 0).getTime();
+    const leftTime = new Date(left?.created_at || 0).getTime();
+    return rightTime - leftTime;
+  });
+  return normalizeHomePayload({
+    categories,
+    featured_products: catalog.filter((item) => item?.featured).slice(0, 8),
+    deal_of_the_day: catalog
+      .filter((item) => item?.deal_of_the_day || Number(item?.original_price || 0) > Number(item?.price || 0))
+      .slice(0, 6),
+    imported_products: catalog.filter((item) => item?.category?.slug === "research-picks").slice(0, 12),
+    new_arrivals: newest.slice(0, 10),
+    hero: {
+      title: "SwiftCart Marketplace",
+      subtitle: "Discover fashion, footwear, and accessories with richer product data, offers, and real checkout flows.",
+      highlight: "Daily deals and premium selections inspired by modern marketplace experiences.",
+    },
+  });
 }
 
 function guardProtectedPage(page) {
@@ -1086,7 +1155,48 @@ window.handleCatalogSearch = runCatalogSearch;
 
 async function renderHomePage() {
   await loadWishlistIds();
-  const payload = await apiFetch("/home");
+  const catalogMessageNode = document.getElementById("catalogMessage");
+  let payload = null;
+  let loadMessage = "";
+  let usedFallback = false;
+
+  try {
+    payload = normalizeHomePayload(await apiFetch("/home"));
+  } catch (error) {
+    loadMessage = error.message || "Live catalog is temporarily unavailable.";
+  }
+
+  if (!payload || !hasAnyHomeProducts(payload)) {
+    try {
+      const [categories, products] = await Promise.all([
+        apiFetch("/categories").catch(() => []),
+        apiFetch("/products?sort=rating").catch(() => []),
+      ]);
+      const fallbackPayload = buildFallbackHomePayload(categories, products);
+      if (hasAnyHomeProducts(fallbackPayload)) {
+        payload = fallbackPayload;
+        usedFallback = true;
+      }
+    } catch {
+      // Keep trying the next fallback.
+    }
+  }
+
+  if ((!payload || !hasAnyHomeProducts(payload))) {
+    const cachedPayload = getCachedHomePayload();
+    if (cachedPayload && hasAnyHomeProducts(cachedPayload)) {
+      payload = cachedPayload;
+      usedFallback = true;
+      if (!loadMessage) {
+        loadMessage = "Showing the last available catalog snapshot while the live refresh completes.";
+      }
+    }
+  }
+
+  payload = normalizeHomePayload(payload || {});
+  if (hasAnyHomeProducts(payload)) {
+    cacheHomePayload(payload);
+  }
   state.home = payload;
   payload.featured_products.forEach((item) => state.productMap.set(item.id, item));
   payload.deal_of_the_day.forEach((item) => state.productMap.set(item.id, item));
@@ -1318,6 +1428,11 @@ async function renderHomePage() {
   });
 
   syncQuickFilterState();
+  if (usedFallback && loadMessage) {
+    setStatus(catalogMessageNode, loadMessage, "error");
+  } else if (!hasAnyHomeProducts(payload)) {
+    setStatus(catalogMessageNode, loadMessage || "Catalog sync is still in progress. Products will appear shortly.", "error");
+  }
 }
 
 async function renderProductPage() {
@@ -2398,12 +2513,18 @@ async function renderAccountPage() {
     return;
   }
 
-  const profile = mergedProfileData(user, await apiFetch(`/users/${user.id}/profile`));
+  let profile = mergedProfileData(user, null);
+  let profileLoadError = "";
+  try {
+    profile = mergedProfileData(user, await apiFetch(`/users/${user.id}/profile`));
+  } catch (error) {
+    profileLoadError = error.message || "Profile details could not be refreshed.";
+  }
   saveStoredUser(profile);
   syncUserUi();
   const photoPrefs = loadProfilePhotoPrefs(profile.id);
 
-  document.querySelectorAll("[data-profile-name]").forEach((node) => { node.textContent = profile.full_name; });
+  document.querySelectorAll("[data-profile-name]").forEach((node) => { node.textContent = profile.full_name || profile.first_name || "Guest"; });
   document.querySelectorAll("[data-profile-first]").forEach((node) => { node.value = profile.first_name; });
   document.querySelectorAll("[data-profile-last]").forEach((node) => { node.value = profile.last_name; });
   document.querySelectorAll("[data-profile-email]").forEach((node) => { node.value = profile.email; });
@@ -2495,6 +2616,10 @@ async function renderAccountPage() {
   const profileImageForm = document.getElementById("profileImageForm");
   const profileImageStatus = document.getElementById("profileImageStatus");
   const profileSaveShortcut = document.getElementById("profileSaveShortcut");
+
+  if (profileLoadError) {
+    setStatus(profileStatus, `Loaded saved account details. Live profile refresh failed: ${profileLoadError}`, "error");
+  }
 
   bindAutoCapitalization([
     profileForm?.elements?.first_name,
