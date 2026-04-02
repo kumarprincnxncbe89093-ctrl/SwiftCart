@@ -3,7 +3,7 @@ import secrets
 from pathlib import Path
 
 from flask import Blueprint, jsonify, request
-from sqlalchemy import and_, or_, text
+from sqlalchemy import and_, inspect, or_, text
 from sqlalchemy.orm import joinedload
 from werkzeug.utils import secure_filename
 
@@ -102,12 +102,7 @@ def _require_merchant(session):
 
 
 def _database_table_names(connection):
-    return [
-        row[0]
-        for row in connection.exec_driver_sql(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
-        ).fetchall()
-    ]
+    return sorted(inspect(connection).get_table_names())
 
 
 def _normalize_sql_statement(sql: str) -> str:

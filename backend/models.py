@@ -75,6 +75,10 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, futu
 _db_initialized = False
 
 
+def _uses_sqlite() -> bool:
+    return engine.dialect.name == "sqlite"
+
+
 @event.listens_for(engine, "connect")
 def _set_sqlite_pragmas(dbapi_connection, _connection_record):
     if not DATABASE_URL.startswith("sqlite"):
@@ -534,7 +538,8 @@ def init_db() -> None:
     seed_data()
     ensure_owner_account()
     ensure_merchant_demo_account()
-    sync_imported_gallery_products()
+    if _should_sync_imported_gallery_products_on_startup():
+        sync_imported_gallery_products()
     _db_initialized = True
 
 
@@ -591,6 +596,11 @@ def log_user_change(session, *, user_id: int, field_name: str, old_value: str | 
 
 
 def ensure_schema_updates() -> None:
+    if not _uses_sqlite():
+        # These legacy ALTER TABLE checks rely on SQLite PRAGMA syntax.
+        # Postgres deployments should use the SQLAlchemy models directly.
+        return
+
     with engine.begin() as connection:
         user_columns = {
             row[1]
@@ -743,6 +753,18 @@ def ensure_schema_updates() -> None:
                 item.status = "Cancelled" if item.order and item.order.status.lower() == "cancelled" else "Placed"
             if item.status.lower() == "cancelled" and not item.canceled_at:
                 item.canceled_at = item.order.canceled_at if item.order else item.created_at
+
+
+def _should_sync_imported_gallery_products_on_startup() -> bool:
+    configured = os.getenv("SWIFTCART_SYNC_IMPORTED_GALLERY")
+    if configured is not None:
+        return configured.strip().lower() in {"1", "true", "yes", "on"}
+
+    if _uses_sqlite():
+        return True
+
+    with session_scope() as session:
+        return session.query(Product.id).first() is None
 
 
 def sync_imported_gallery_products() -> None:
