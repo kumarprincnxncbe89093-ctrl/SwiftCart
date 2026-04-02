@@ -76,6 +76,37 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
+function sanitizeUrl(value, fallback = "#") {
+  const raw = String(value || "").trim();
+  if (!raw) return fallback;
+
+  const lowered = raw.toLowerCase();
+  if (lowered.startsWith("javascript:") || lowered.startsWith("vbscript:")) {
+    return fallback;
+  }
+  if (lowered.startsWith("data:") && !lowered.startsWith("data:image/")) {
+    return fallback;
+  }
+  if (
+    lowered.startsWith("https://")
+    || lowered.startsWith("http://")
+    || lowered.startsWith("blob:")
+    || lowered.startsWith("data:image/")
+    || raw.startsWith("/")
+    || raw.startsWith("./")
+    || raw.startsWith("../")
+    || /^[a-zA-Z0-9][a-zA-Z0-9/_?.%=&+#:-]*$/.test(raw)
+  ) {
+    return raw;
+  }
+  return fallback;
+}
+
+function buildProductHref(slug) {
+  const normalizedSlug = String(slug || "").trim();
+  return normalizedSlug ? `product.html?slug=${encodeURIComponent(normalizedSlug)}` : "product.html";
+}
+
 function normalizeHomePayload(payload = {}) {
   return {
     hero: {
@@ -524,7 +555,7 @@ function buildUserAvatarMarkup(user) {
     const photoPrefs = user?.id ? loadProfilePhotoPrefs(user.id) : {};
     const zoom = Number(photoPrefs.zoom) || 1;
     const focus = Number(photoPrefs.focus) || 50;
-    return `<img class="account-avatar-image" src="${user.profile_image}" alt="${escapeHtml(user.full_name || user.first_name || "User")}" style="--profile-zoom:${zoom}; --profile-focus:${focus}%;" onerror="this.onerror=null;this.src='images/swift.png';">`;
+    return `<img class="account-avatar-image" src="${escapeHtml(sanitizeUrl(user.profile_image, "images/swift.png"))}" alt="${escapeHtml(user.full_name || user.first_name || "User")}" style="--profile-zoom:${zoom}; --profile-focus:${focus}%;" onerror="this.onerror=null;this.src='images/swift.png';">`;
   }
 
   const seed = String(user?.first_name || user?.full_name || "U").trim().charAt(0).toUpperCase();
@@ -608,19 +639,21 @@ async function loadWishlistIds() {
 }
 
 function buildProductCard(product) {
+  const productHref = buildProductHref(product.slug);
+  const productImage = sanitizeUrl(product.image, "images/swift.png");
   const wishlistBadge = state.wishlistIds.has(product.id) ? "<span class=\"wishlist-badge\">Saved</span>" : "";
   return `
     <article class="product-card">
-      <div class="product-tag">${product.tag}</div>
+      <div class="product-tag">${escapeHtml(product.tag)}</div>
       ${wishlistBadge}
-      <a href="product.html?slug=${product.slug}" class="product-image-link" aria-label="View details for ${product.name}">
-        <img src="${product.image}" alt="${product.name}">
+      <a href="${escapeHtml(productHref)}" class="product-image-link" aria-label="View details for ${escapeHtml(product.name)}">
+        <img src="${escapeHtml(productImage)}" alt="${escapeHtml(product.name)}">
       </a>
-      <h3><a href="product.html?slug=${product.slug}" class="product-title-link">${product.name}</a></h3>
-      <p class="product-copy">${product.description}</p>
+      <h3><a href="${escapeHtml(productHref)}" class="product-title-link">${escapeHtml(product.name)}</a></h3>
+      <p class="product-copy">${escapeHtml(product.description)}</p>
       <div class="product-meta">
         <span class="rating-chip">${renderStars(product.rating)}<strong class="rating-value">${product.rating.toFixed(1)}</strong></span>
-        <span>${product.reviews_count} reviews</span>
+        <span>${escapeHtml(String(product.reviews_count))} reviews</span>
       </div>
       <div class="product-stock-row">${buildStockStatusMarkup(product, { compact: true })}</div>
       <div class="product-footer">
@@ -628,7 +661,7 @@ function buildProductCard(product) {
           <strong>${formatPrice(product.price)}</strong>
           ${buildPriceMetaMarkup(product)}
         </div>
-        <a href="product.html?slug=${product.slug}" class="product-link">View Details</a>
+        <a href="${escapeHtml(productHref)}" class="product-link">View Details</a>
       </div>
     </article>
   `;
@@ -1062,7 +1095,7 @@ function renderOrderLineItem(order, item) {
 
   return `
     <article class="order-line-item${itemStatus === "Cancelled" ? " is-cancelled" : ""}">
-      <img class="order-line-media" src="${item.image}" alt="${escapeHtml(item.name)}">
+      <img class="order-line-media" src="${escapeHtml(sanitizeUrl(item.image, "images/swift.png"))}" alt="${escapeHtml(item.name)}">
       <div class="order-line-copy">
         <div class="order-line-top">
           <div>
@@ -1231,9 +1264,9 @@ function renderCategories(categories) {
   container.innerHTML = categories
     .map(
       (category) => `
-        <button class="category-pill" type="button" data-category="${category.slug}">
-          <strong>${category.name}</strong>
-          <span>${category.banner_title}</span>
+        <button class="category-pill" type="button" data-category="${escapeHtml(category.slug)}">
+          <strong>${escapeHtml(category.name)}</strong>
+          <span>${escapeHtml(category.banner_title)}</span>
         </button>
       `
     )
@@ -1336,6 +1369,7 @@ async function renderHomePage() {
   payload.featured_products.forEach((item) => state.productMap.set(item.id, item));
   payload.deal_of_the_day.forEach((item) => state.productMap.set(item.id, item));
   payload.new_arrivals.forEach((item) => state.productMap.set(item.id, item));
+  payload.imported_products.forEach((item) => state.productMap.set(item.id, item));
 
   const heroTitle = document.getElementById("heroTitle");
   const heroSubtitle = document.getElementById("heroSubtitle");
@@ -1589,7 +1623,7 @@ async function renderProductPage() {
     if (missingState) missingState.hidden = true;
 
     document.title = `${product.name} - SwiftCart`;
-    document.getElementById("productImage").src = product.image;
+    setImageSourceWithFallback(document.getElementById("productImage"), sanitizeUrl(product.image, "images/swift.png"), "images/swift.png");
     document.getElementById("productImage").alt = product.name;
     document.getElementById("productName").textContent = product.name;
     document.getElementById("productTag").textContent = product.tag;
@@ -1631,9 +1665,9 @@ async function renderProductPage() {
     }
 
     const filteredHighlights = product.highlights.filter((item) => !/imported into catalog/i.test(String(item || "")));
-    document.getElementById("productHighlights").innerHTML = filteredHighlights.map((item) => `<li>${item}</li>`).join("");
+    document.getElementById("productHighlights").innerHTML = filteredHighlights.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
     document.getElementById("productSpecs").innerHTML = Object.entries(product.specifications)
-      .map(([key, value]) => `<tr><td>${key}</td><td>${value}</td></tr>`)
+      .map(([key, value]) => `<tr><td>${escapeHtml(key)}</td><td>${escapeHtml(value)}</td></tr>`)
       .join("");
     const specsPanel = document.getElementById("specificationsPanel");
     const specToggleButton = document.getElementById("specToggleButton");
@@ -1650,10 +1684,10 @@ async function renderProductPage() {
     reviewList.innerHTML = product.reviews.length
       ? product.reviews.map((review) => `
           <article class="review-card">
-            <strong>${review.title}</strong>
-            <span class="review-meta">${renderStars(review.rating)}<strong class="rating-value">${review.rating.toFixed(1)}</strong><span>by ${review.author_name}</span><span>${formatCompactDateTime(review.created_at)}</span></span>
-            <p>${review.comment}</p>
-            ${review.image ? `<img src="${review.image}" alt="${review.title}" class="review-image-card">` : ""}
+            <strong>${escapeHtml(review.title)}</strong>
+            <span class="review-meta">${renderStars(review.rating)}<strong class="rating-value">${review.rating.toFixed(1)}</strong><span>by ${escapeHtml(review.author_name)}</span><span>${formatCompactDateTime(review.created_at)}</span></span>
+            <p>${escapeHtml(review.comment)}</p>
+            ${review.image ? `<img src="${escapeHtml(sanitizeUrl(review.image, "images/swift.png"))}" alt="${escapeHtml(review.title)}" class="review-image-card">` : ""}
             ${
               currentUser && review.author_user_id === currentUser.id
                 ? `<div class="inline-actions"><button type="button" class="ghost-button delete-review-button" data-review-id="${review.id}">Delete My Review</button></div>`
@@ -1890,10 +1924,10 @@ async function renderCartPage() {
   }
   listNode.innerHTML = items.map((item) => `
     <article class="cart-item">
-      <img src="${item.image}" alt="${item.name}">
+      <img src="${escapeHtml(sanitizeUrl(item.image, "images/swift.png"))}" alt="${escapeHtml(item.name)}">
       <div class="cart-item-info">
-        <h3>${item.name}</h3>
-        <p>${item.description}</p>
+        <h3>${escapeHtml(item.name)}</h3>
+        <p>${escapeHtml(item.description)}</p>
         <div class="cart-stock-row">${buildStockStatusMarkup(item)}</div>
         <div class="cart-item-meta">
           <div class="quantity-controls">
@@ -1904,7 +1938,7 @@ async function renderCartPage() {
           <strong>${formatPrice(item.total)}</strong>
         </div>
         <div class="inline-actions">
-          <a class="product-link" href="product.html?slug=${item.slug}">View Product</a>
+          <a class="product-link" href="${escapeHtml(buildProductHref(item.slug))}">View Product</a>
           <button class="ghost-button remove-cart-item" data-product-id="${item.id}" type="button">Remove</button>
         </div>
       </div>
@@ -2018,7 +2052,7 @@ async function renderPaymentPage() {
   const paymentQrPanel = document.getElementById("paymentQrPanel");
   const savedAddressesNode = document.getElementById("savedDeliveryAddresses");
   const selectedAddressStatus = document.getElementById("selectedAddressStatus");
-  const customLogoHtml = window.SWIFTCART_PAYMENT_LOGO_HTML || localStorage.getItem("swiftcart-payment-logo-html");
+  const customLogoHtml = typeof window.SWIFTCART_PAYMENT_LOGO_HTML === "string" ? window.SWIFTCART_PAYMENT_LOGO_HTML : "";
   const summary = calculateCartSummary(items);
 
   if (logoSlot && customLogoHtml) {
@@ -2123,11 +2157,11 @@ async function renderPaymentPage() {
   const unavailableItems = items.filter((item) => isProductOutOfStock(item) || item.quantity > Number(item.stock || 0));
   summaryList.innerHTML = items.map((item) => `
     <div class="summary-item">
-      <img src="${item.image}" alt="${item.name}">
+      <img src="${escapeHtml(sanitizeUrl(item.image, "images/swift.png"))}" alt="${escapeHtml(item.name)}">
       <div>
-        <p>${item.name}</p>
+        <p>${escapeHtml(item.name)}</p>
         <small>Qty ${item.quantity}</small>
-        <small>${item.stock_status || "In Stock"}${Number(item.stock || 0) > 0 ? ` · ${item.stock} left` : ""}</small>
+        <small>${escapeHtml(item.stock_status || "In Stock")}${Number(item.stock || 0) > 0 ? ` · ${item.stock} left` : ""}</small>
       </div>
       <strong>${formatPrice(item.total)}</strong>
     </div>
@@ -2287,7 +2321,13 @@ async function handleRegistration() {
       });
       otpSessionIdInput.value = response.otp_session_id;
       state.registerOtpVerified = false;
-      setStatus(otpStatus, `OTP sent. Demo OTP for local testing: ${response.otp_preview}`, "success");
+      setStatus(
+        otpStatus,
+        response.otp_preview
+          ? `OTP sent. Demo OTP for local testing: ${response.otp_preview}`
+          : "OTP sent successfully. Check your verification channel and enter the code here.",
+        "success"
+      );
       startCooldown(sendOtpButton, 30, (remaining) => {
         sendOtpButton.textContent = remaining ? `Resend OTP in ${remaining}s` : "Send OTP";
       });
@@ -2486,7 +2526,7 @@ async function handleLogin() {
       if (loginAccountSelect && loginLinkedAccountsBox) {
         if (state.loginOtpAccounts.length > 1) {
           loginAccountSelect.innerHTML = state.loginOtpAccounts.map((account) => `
-            <option value="${account.id}">${account.full_name} · ${account.email} · ${account.unique_code}</option>
+            <option value="${account.id}">${escapeHtml(`${account.full_name} · ${account.email} · ${account.unique_code}`)}</option>
           `).join("");
           loginLinkedAccountsBox.hidden = false;
         } else {
@@ -2494,7 +2534,13 @@ async function handleLogin() {
           loginAccountSelect.innerHTML = "";
         }
       }
-      setStatus(loginOtpStatus, `Login OTP sent. Demo OTP for local testing: ${response.otp_preview}`, "success");
+      setStatus(
+        loginOtpStatus,
+        response.otp_preview
+          ? `Login OTP sent. Demo OTP for local testing: ${response.otp_preview}`
+          : "Login OTP sent successfully. Check your verification channel and enter the code here.",
+        "success"
+      );
       loadCaptcha();
       startCooldown(sendLoginOtpButton, 30, (remaining) => {
         sendLoginOtpButton.textContent = remaining ? `Resend OTP in ${remaining}s` : "Send Login OTP";
@@ -2569,7 +2615,7 @@ async function handleLogin() {
       if (recoveryAccountSelect && recoveryLinkedAccountsBox) {
         if (state.recoveryOtpAccounts.length > 1) {
           recoveryAccountSelect.innerHTML = state.recoveryOtpAccounts.map((account) => `
-            <option value="${account.id}">${account.full_name} · ${account.email} · ${account.unique_code}</option>
+            <option value="${account.id}">${escapeHtml(`${account.full_name} · ${account.email} · ${account.unique_code}`)}</option>
           `).join("");
           recoveryLinkedAccountsBox.hidden = false;
         } else {
@@ -2577,7 +2623,13 @@ async function handleLogin() {
           recoveryAccountSelect.innerHTML = "";
         }
       }
-      setStatus(recoveryStatus, `Recovery OTP sent. Demo OTP for local testing: ${response.otp_preview}`, "success");
+      setStatus(
+        recoveryStatus,
+        response.otp_preview
+          ? `Recovery OTP sent. Demo OTP for local testing: ${response.otp_preview}`
+          : "Recovery OTP sent successfully. Check your verification channel and enter the code here.",
+        "success"
+      );
       loadCaptcha();
       startCooldown(sendRecoveryOtpButton, 30, (remaining) => {
         sendRecoveryOtpButton.textContent = remaining ? `Resend OTP in ${remaining}s` : "Send Recovery OTP";
@@ -3093,7 +3145,7 @@ async function renderOrdersPage() {
           ${renderOrderTimeline(order)}
           ${order.cancel_reason ? `<p class="order-cancel-note"><strong>Cancellation reason:</strong> ${escapeHtml(order.cancel_reason)}</p>` : ""}
           <div class="summary-row">
-            <span>${order.items.length} product${order.items.length === 1 ? "" : "s"} in this order</span>
+            <span>${order.items.length} product${order.items.length === 1 ? "" : "s"} in this order for ${escapeHtml(order.customer?.full_name || "Customer")}</span>
             <strong>${formatPrice(order.total_amount)}</strong>
           </div>
         </article>
@@ -3161,14 +3213,14 @@ async function renderWishlistPage() {
 
   container.innerHTML = wishlist.map((item) => `
     <article class="cart-item">
-      <img src="${item.image}" alt="${item.name}">
+      <img src="${escapeHtml(sanitizeUrl(item.image, "images/swift.png"))}" alt="${escapeHtml(item.name)}">
       <div class="cart-item-info">
-        <h3>${item.name}</h3>
-        <p>${item.description}</p>
+        <h3>${escapeHtml(item.name)}</h3>
+        <p>${escapeHtml(item.description)}</p>
         <div class="cart-item-meta">
           <strong>${formatPrice(item.price)}</strong>
           <div class="inline-actions">
-            <a class="product-link" href="product.html?slug=${item.slug}">View</a>
+            <a class="product-link" href="${escapeHtml(buildProductHref(item.slug))}">View</a>
             <button class="ghost-button wishlist-remove" data-product-id="${item.id}" type="button">Remove</button>
           </div>
         </div>
@@ -3229,22 +3281,22 @@ async function renderMerchantPage() {
   if (merchantNode) {
     merchantNode.innerHTML = `
       <article class="stat-card">
-        <strong>${dashboard.merchant.shop_name || dashboard.merchant.full_name}</strong>
-        <span>${dashboard.merchant.email}${dashboard.merchant.gstin ? ` · ${dashboard.merchant.gstin}` : ""}</span>
+        <strong>${escapeHtml(dashboard.merchant.shop_name || dashboard.merchant.full_name)}</strong>
+        <span>${escapeHtml(dashboard.merchant.email)}${dashboard.merchant.gstin ? ` · ${escapeHtml(dashboard.merchant.gstin)}` : ""}</span>
       </article>
     `;
   }
 
   categorySelect.innerHTML = catalog.categories.map((category) => `
-    <option value="${category.id}">${category.name}</option>
+    <option value="${category.id}">${escapeHtml(category.name)}</option>
   `).join("");
 
   tableNode.innerHTML = catalog.products.length
     ? catalog.products.map((product) => `
         <article class="admin-row">
           <div>
-            <strong>${product.name}</strong>
-            <p>${product.category.name} · ${product.tag} · Stock ${product.stock}</p>
+            <strong>${escapeHtml(product.name)}</strong>
+            <p>${escapeHtml(product.category.name)} · ${escapeHtml(product.tag)} · Stock ${product.stock}</p>
           </div>
           <div class="admin-actions">
             <span>${formatPrice(product.price)}</span>
@@ -3813,8 +3865,8 @@ async function renderAdminPage() {
       ? visibleProducts.map((product) => `
           <article class="admin-row">
             <div>
-              <strong>${product.name}</strong>
-              <p>Product ID ${product.id} · ${product.category.name}${product.secondary_categories?.length ? ` · ${product.secondary_categories.join(", ")}` : ""} · ${product.tag}${product.seller_shop_name ? ` · Seller ${product.seller_shop_name}` : ""}</p>
+              <strong>${escapeHtml(product.name)}</strong>
+              <p>Product ID ${product.id} · ${escapeHtml(product.category.name)}${product.secondary_categories?.length ? ` · ${escapeHtml(product.secondary_categories.join(", "))}` : ""} · ${escapeHtml(product.tag)}${product.seller_shop_name ? ` · Seller ${escapeHtml(product.seller_shop_name)}` : ""}</p>
               <p>${buildStockStatusMarkup(product)}${hasVisibleDiscount(product) ? ` · ${formatPrice(product.price)} from ${formatPrice(product.original_price)}` : ` · ${formatPrice(product.price)}`}</p>
               <p class="admin-rating-row">${renderStars(product.rating)}<strong class="rating-value">${product.rating.toFixed(1)}</strong><span>${product.reviews_count} customer ratings</span></p>
             </div>
@@ -3847,8 +3899,8 @@ async function renderAdminPage() {
       ? visibleUsers.map((member) => `
           <article class="admin-row">
             <div>
-              <strong>${member.full_name}</strong>
-              <p>${member.email} · ${formatPhoneDisplay(member.mobile)} · ${member.account_type}${member.shop_name ? ` · ${member.shop_name}` : ""}</p>
+              <strong>${escapeHtml(member.full_name)}</strong>
+              <p>${escapeHtml(member.email)} · ${escapeHtml(formatPhoneDisplay(member.mobile))} · ${escapeHtml(member.account_type)}${member.shop_name ? ` · ${escapeHtml(member.shop_name)}` : ""}</p>
               <p>Code ${member.unique_code} · Joined ${formatCompactDateTime(member.created_at)} · Last login ${formatCompactDateTime(member.last_login_at)}</p>
               <p>Device ${escapeHtml(member.last_login_device || "Not captured yet")} · ${escapeHtml(member.last_login_browser || "Unknown browser")} on ${escapeHtml(member.last_login_platform || "Unknown platform")} · ${escapeHtml(member.last_login_method ? member.last_login_method.replaceAll("_", " ") : "Unknown method")}</p>
               <p>Last IP ${escapeHtml(member.last_login_ip || "Not captured yet")}</p>
@@ -3856,7 +3908,7 @@ async function renderAdminPage() {
               <p>Password updated ${formatCompactDateTime(member.password_changed_at)} · Password history is protected server-side.</p>
               <p class="admin-sensitive-copy">Plaintext passwords are not stored and password hashes are not exposed in the browser.</p>
               <p class="admin-sensitive-copy">Owner can edit user data, but the unique code is locked.</p>
-              ${member.address ? `<p>${member.address.street}, ${member.address.city}, ${member.address.state} ${member.address.pincode}</p>` : ""}
+              ${member.address ? `<p>${escapeHtml(`${member.address.street}, ${member.address.city}, ${member.address.state} ${member.address.pincode}`)}</p>` : ""}
             </div>
             <div class="admin-actions">
               <span>${member.is_owner ? "Owner" : member.is_banned ? "Banned" : isMerchantUser(member) ? "Merchant" : "Customer"}</span>
@@ -3885,9 +3937,9 @@ async function renderAdminPage() {
     codesNode.innerHTML = dashboard.users.length
       ? visibleCodes.map((member) => `
           <article class="identity-code-card">
-            <strong>${member.unique_code}</strong>
-            <p>${member.full_name}</p>
-            <span>${member.email}</span>
+            <strong>${escapeHtml(member.unique_code)}</strong>
+            <p>${escapeHtml(member.full_name)}</p>
+            <span>${escapeHtml(member.email)}</span>
           </article>
         `).join("")
       : "<p class=\"empty-copy\">No unique IDs available.</p>";
@@ -3908,8 +3960,8 @@ async function renderAdminPage() {
           <article class="admin-row">
             <div>
               <strong>Order #${order.id}</strong>
-              <p>${order.customer.full_name} · ${order.customer.email}${order.customer.shop_name ? ` · ${order.customer.shop_name}` : ""}</p>
-              <p>${order.items.map((item) => `${item.name} x${item.quantity}`).join(", ")}</p>
+              <p>${escapeHtml(order.customer.full_name)} · ${escapeHtml(order.customer.email)}${order.customer.shop_name ? ` · ${escapeHtml(order.customer.shop_name)}` : ""}</p>
+              <p>${escapeHtml(order.items.map((item) => `${item.name} x${item.quantity}`).join(", "))}</p>
               <p>Ordered on ${order.created_date} at ${order.created_time}</p>
             </div>
             <div class="admin-actions">
@@ -3940,14 +3992,14 @@ async function renderAdminPage() {
       ? visibleReviews.map((review) => `
           <article class="admin-row review-row">
             <div>
-              <strong>${review.title}</strong>
-              <p>${review.product_name} · by ${review.author_name}</p>
+              <strong>${escapeHtml(review.title)}</strong>
+              <p>${escapeHtml(review.product_name)} · by ${escapeHtml(review.author_name)}</p>
               <p class="admin-rating-row">${renderStars(review.rating)}<strong class="rating-value">${Number(review.rating).toFixed(1)}</strong><span>${formatCompactDateTime(review.created_at)}</span></p>
-              <p>${review.comment}</p>
-              ${review.image ? `<img class="admin-review-image" src="${review.image}" alt="${review.title}">` : ""}
+              <p>${escapeHtml(review.comment)}</p>
+              ${review.image ? `<img class="admin-review-image" src="${escapeHtml(sanitizeUrl(review.image, "images/swift.png"))}" alt="${escapeHtml(review.title)}">` : ""}
             </div>
             <div class="admin-actions">
-              <a class="product-link" href="product.html?slug=${review.product_slug}">Open Product</a>
+              <a class="product-link" href="${escapeHtml(buildProductHref(review.product_slug))}">Open Product</a>
               ${buildAdminRowActions([
                 { type: "edit-review", value: String(review.id), label: "Edit Data" },
                 { type: "inspect-review", value: String(review.id), label: "Inspect" },
@@ -3973,10 +4025,10 @@ async function renderAdminPage() {
       ? visibleLinked.map((group) => `
           <article class="admin-row linked-account-card">
             <div class="linked-account-copy">
-              <strong>${formatPhoneDisplay(group.mobile)}</strong>
+              <strong>${escapeHtml(formatPhoneDisplay(group.mobile))}</strong>
               <p>${group.count} accounts linked to this number</p>
               <div class="linked-account-chips">
-                ${group.accounts.map((account) => `<span>${account.full_name} · ${account.email} · ${account.unique_code}</span>`).join("")}
+                ${group.accounts.map((account) => `<span>${escapeHtml(`${account.full_name} · ${account.email} · ${account.unique_code}`)}</span>`).join("")}
               </div>
             </div>
             <div class="admin-actions">

@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta
 import json
 from pathlib import Path
-from re import sub
+from re import search, sub
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, create_engine, event, text
 from sqlalchemy.engine import URL
@@ -34,9 +34,15 @@ def _env_int(name: str, default: int) -> int:
 
 
 def _normalize_database_url(raw_url: str | None) -> str:
-    url = (raw_url or "").strip()
+    url = str(raw_url or "").strip().strip("'\"")
     if "\n" in url:
         url = url.splitlines()[0].strip()
+    for prefix in ("DATABASE_URL=", "DATABASE_PRIVATE_URL=", "DATABASE_PUBLIC_URL="):
+        if url.startswith(prefix):
+            url = url.split("=", 1)[1].strip().strip("'\"")
+    matched_url = search(r"(postgres(?:ql)?://\S+|postgresql\+psycopg://\S+|sqlite:///\S+)", url)
+    if matched_url:
+        url = matched_url.group(1).strip().strip("'\"")
     for marker in (
         "SECRET_KEY=",
         "FLASK_ENV=",
@@ -69,8 +75,19 @@ def _looks_like_placeholder_database_url(url: str) -> bool:
     return (
         url.startswith("${{")
         or url.startswith("{{")
+        or lowered in {"postgres://", "postgresql://", "postgresql+psycopg://"}
         or ("railway.internal" in lowered and "@" not in url)
     )
+
+
+def _usable_database_url_from_env(env_key: str) -> str | None:
+    candidate = _normalize_database_url(os.getenv(env_key))
+    if not candidate:
+        return None
+    if _looks_like_placeholder_database_url(candidate):
+        logger.warning("Ignoring placeholder %s value.", env_key)
+        return None
+    return candidate
 
 
 def _build_database_url_from_pg_env() -> str | None:
@@ -100,12 +117,12 @@ def _build_database_url_from_pg_env() -> str | None:
 
 
 def _resolve_database_url() -> str:
-    raw_database_url = _normalize_database_url(os.getenv("DATABASE_URL"))
-    if raw_database_url and not _looks_like_placeholder_database_url(raw_database_url):
+    raw_database_url = _usable_database_url_from_env("DATABASE_URL")
+    if raw_database_url:
         return raw_database_url
 
     for env_key in ("DATABASE_PRIVATE_URL", "DATABASE_PUBLIC_URL"):
-        candidate = _normalize_database_url(os.getenv(env_key))
+        candidate = _usable_database_url_from_env(env_key)
         if candidate:
             return candidate
 
@@ -113,9 +130,9 @@ def _resolve_database_url() -> str:
     if built_from_pg_env:
         return built_from_pg_env
 
-    if raw_database_url and _looks_like_placeholder_database_url(raw_database_url):
+    if os.getenv("DATABASE_URL"):
         logger.warning(
-            "Ignoring placeholder DATABASE_URL value. On Railway, set DATABASE_URL to a "
+            "Ignoring DATABASE_URL value that does not look usable. On Railway, set DATABASE_URL to a "
             "reference like ${{Postgres.DATABASE_URL}} or expose PGHOST/PGPORT/PGUSER/PGPASSWORD/PGDATABASE."
         )
 
@@ -451,6 +468,8 @@ def serialize_product(product: Product) -> dict:
         "delivery_note": product.delivery_note,
         "featured": product.featured,
         "deal_of_the_day": product.deal_of_the_day,
+        "created_at": product.created_at.isoformat(),
+        "updated_at": product.updated_at.isoformat(),
         "seller_id": product.seller_id,
         "seller_name": (
             f"{product.seller.first_name} {product.seller.last_name}".strip()
@@ -568,6 +587,8 @@ def serialize_order(order: Order) -> dict:
 
 
 def _resolve_order_status(order: Order, fallback_status: str) -> str:
+    if fallback_status == "Order Placed":
+        fallback_status = "Placed"
     order_status = str(order.status or "Placed")
     item_statuses = [
         (item.status or order_status or "Placed").strip().lower()

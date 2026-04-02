@@ -1,3 +1,4 @@
+import os
 import random
 import secrets
 from datetime import datetime, timedelta
@@ -5,6 +6,8 @@ from pathlib import Path
 
 from flask import Blueprint, jsonify, request
 from sqlalchemy import func, or_
+from sqlalchemy.orm import joinedload
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
@@ -33,7 +36,14 @@ from backend.models import (
 users_bp = Blueprint("users", __name__)
 PROFILE_UPLOAD_DIR = BASE_DIR.parent / "frontend" / "uploads" / "profiles"
 ALLOWED_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
-CAPTCHA_STORE: dict[str, dict[str, object]] = {}
+CAPTCHA_TTL_SECONDS = 300
+CAPTCHA_SALT = "swiftcart-captcha"
+SHOW_OTP_PREVIEW = str(
+    os.getenv(
+        "SWIFTCART_EXPOSE_OTP_PREVIEW",
+        "0" if (os.getenv("FLASK_ENV") or "").strip().lower() == "production" else "1",
+    )
+).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _title_case(value: str) -> str:
@@ -307,6 +317,11 @@ def _stamp_login_context(user: User, *, method: str) -> None:
     user.last_login_method = method
 
 
+def _captcha_serializer() -> URLSafeTimedSerializer:
+    secret = os.getenv("SECRET_KEY", "swiftcart-dev-secret")
+    return URLSafeTimedSerializer(secret, salt=CAPTCHA_SALT)
+
+
 def _create_captcha_challenge() -> dict:
     left = random.randint(1, 9)
     right = random.randint(1, 9)
@@ -314,28 +329,26 @@ def _create_captcha_challenge() -> dict:
     if operator == "-":
         left, right = max(left, right), min(left, right)
     answer = left + right if operator == "+" else left - right
-    challenge_id = secrets.token_urlsafe(12)
-    CAPTCHA_STORE[challenge_id] = {
-        "answer": str(answer),
-        "expires_at": datetime.utcnow() + timedelta(minutes=5),
-    }
+    challenge_id = _captcha_serializer().dumps({"answer": str(answer)})
     return {
         "captcha_id": challenge_id,
         "prompt": f"What is {left} {operator} {right}?",
-        "expires_in_seconds": 300,
+        "expires_in_seconds": CAPTCHA_TTL_SECONDS,
     }
 
 
 def _verify_captcha(captcha_id: str, captcha_answer: str) -> tuple[bool, str]:
-    record = CAPTCHA_STORE.get(str(captcha_id or "").strip())
-    if not record:
+    raw_captcha_id = str(captcha_id or "").strip()
+    if not raw_captcha_id:
         return False, "Human verification expired. Refresh the verification and try again."
-    if datetime.utcnow() > record["expires_at"]:
-        CAPTCHA_STORE.pop(str(captcha_id or "").strip(), None)
+    try:
+        payload = _captcha_serializer().loads(raw_captcha_id, max_age=CAPTCHA_TTL_SECONDS)
+    except SignatureExpired:
         return False, "Human verification expired. Refresh the verification and try again."
-    if str(record["answer"]).strip() != str(captcha_answer or "").strip():
+    except BadSignature:
+        return False, "Human verification expired. Refresh the verification and try again."
+    if str(payload.get("answer", "")).strip() != str(captcha_answer or "").strip():
         return False, "Human verification answer is incorrect."
-    CAPTCHA_STORE.pop(str(captcha_id or "").strip(), None)
     return True, ""
 
 
@@ -393,9 +406,10 @@ def request_otp():
         response = {
             "message": "OTP sent successfully.",
             "otp_session_id": otp.id,
-            "otp_preview": otp_value,
             "expires_in_seconds": 600,
         }
+        if SHOW_OTP_PREVIEW:
+            response["otp_preview"] = otp_value
         if purpose in {"login", "recover"} and mobile:
             response["mobile"] = mobile
         if purpose in {"login", "recover"}:
@@ -1012,13 +1026,15 @@ def get_wishlist(user_id: int):
         user, error = _require_same_user(session, user_id)
         if error:
             return error
-        items = (
-            session.query(WishlistItem)
+        wishlist_rows = (
+            session.query(WishlistItem, Product)
+            .join(Product, Product.id == WishlistItem.product_id)
+            .options(joinedload(Product.category), joinedload(Product.seller))
             .filter(WishlistItem.user_id == user_id)
+            .order_by(WishlistItem.created_at.desc(), WishlistItem.id.desc())
             .all()
         )
-        product_ids = [item.product_id for item in items]
-        products = session.query(Product).filter(Product.id.in_(product_ids)).all() if product_ids else []
+        products = [product for _, product in wishlist_rows]
         return jsonify([serialize_product(product) for product in products])
 
 
