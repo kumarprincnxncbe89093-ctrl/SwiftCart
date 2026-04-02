@@ -108,6 +108,8 @@ def create_app() -> Flask:
         forwarded_proto = request.headers.get("X-Forwarded-Proto", "")
         if request.is_secure or "https" in forwarded_proto.lower():
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        if request.host.endswith(".up.railway.app"):
+            response.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive"
         if (
             request.path.startswith("/api")
             or response.mimetype in {"text/html", "text/css", "application/javascript", "text/javascript"}
@@ -141,6 +143,14 @@ def create_app() -> Flask:
     @app.get("/")
     def root():
         return send_from_directory(FRONTEND_DIR, "index.html")
+
+    @app.get("/checkout")
+    def checkout_page():
+        return send_from_directory(FRONTEND_DIR, "Payment.html")
+
+    @app.get("/owner-workspace")
+    def owner_workspace_page():
+        return send_from_directory(FRONTEND_DIR, "Admin.html")
 
     @app.get("/<path:filename>")
     def frontend_files(filename: str):
