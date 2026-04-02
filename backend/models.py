@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 import json
 from pathlib import Path
 from re import sub
+from urllib.parse import quote
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, create_engine, event, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
@@ -20,8 +21,38 @@ DATABASE_PATH = BASE_DIR / "database.db"
 DEFAULT_SQLITE_URL = f"sqlite:///{DATABASE_PATH}"
 
 
-def _normalize_database_url(raw_url: str | None) -> str:
-    url = (raw_url or DEFAULT_SQLITE_URL).strip()
+def _clean_env_value(raw_value: str | None) -> str:
+    value = (raw_value or "").strip()
+    if value.startswith(("'", '"')) and value.endswith(("'", '"')) and len(value) >= 2:
+        value = value[1:-1].strip()
+    return value
+
+
+def _compose_database_url_from_pg_env() -> str | None:
+    host = _clean_env_value(os.getenv("PGHOST"))
+    port = _clean_env_value(os.getenv("PGPORT")) or "5432"
+    user = _clean_env_value(os.getenv("PGUSER"))
+    password = _clean_env_value(os.getenv("PGPASSWORD"))
+    database = _clean_env_value(os.getenv("PGDATABASE"))
+    if not all((host, user, password, database)):
+        return None
+
+    return (
+        "postgresql+psycopg://"
+        f"{quote(user, safe='')}:{quote(password, safe='')}@"
+        f"{host}:{port}/{quote(database, safe='')}"
+    )
+
+
+def _normalize_database_url(raw_url: str | None = None) -> str:
+    url = _clean_env_value(raw_url)
+    if not url:
+        url = (
+            _clean_env_value(os.getenv("DATABASE_PRIVATE_URL"))
+            or _clean_env_value(os.getenv("DATABASE_PUBLIC_URL"))
+            or _compose_database_url_from_pg_env()
+            or DEFAULT_SQLITE_URL
+        )
     if "\n" in url:
         url = url.splitlines()[0].strip()
     for marker in (
@@ -41,6 +72,8 @@ def _normalize_database_url(raw_url: str | None) -> str:
     ):
         if marker in url:
             url = url.split(marker, 1)[0].strip()
+    if url.startswith("${{") or url.startswith("${"):
+        url = _compose_database_url_from_pg_env() or url
     if url.startswith("postgres://"):
         return "postgresql+psycopg://" + url[len("postgres://") :]
     if url.startswith("postgresql://"):
@@ -64,8 +97,8 @@ if DATABASE_URL.startswith("sqlite"):
 else:
     SQLALCHEMY_ENGINE_KWARGS.update(
         {
-            "pool_size": int(os.getenv("DB_POOL_SIZE", "12")),
-            "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "24")),
+            "pool_size": int(os.getenv("DB_POOL_SIZE", "3")),
+            "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "2")),
             "pool_recycle": int(os.getenv("DB_POOL_RECYCLE", "1800")),
         }
     )
