@@ -140,8 +140,8 @@ def _resolve_database_url() -> str:
 
 
 DATABASE_URL = _resolve_database_url()
-OWNER_EMAIL = (os.getenv("OWNER_EMAIL") or "owner@swiftcart.local").strip().lower()
-OWNER_PASSWORD = (os.getenv("OWNER_PASSWORD") or "").strip()
+OWNER_EMAIL = (os.getenv("OWNER_EMAIL") or "prince12345@gmail.com").strip().lower()
+OWNER_PASSWORD = (os.getenv("OWNER_PASSWORD") or "172388Pr").strip()
 MERCHANT_DEMO_EMAIL = (os.getenv("MERCHANT_DEMO_EMAIL") or "merchant@swiftcart.com").strip().lower()
 MERCHANT_DEMO_PASSWORD = (os.getenv("MERCHANT_DEMO_PASSWORD") or "").strip()
 ENABLE_DEMO_MERCHANT = str(os.getenv("ENABLE_DEMO_MERCHANT", "0")).strip().lower() in {"1", "true", "yes", "on"}

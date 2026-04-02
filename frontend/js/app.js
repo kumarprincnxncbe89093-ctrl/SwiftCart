@@ -107,6 +107,18 @@ function buildProductHref(slug) {
   return normalizedSlug ? `product.html?slug=${encodeURIComponent(normalizedSlug)}` : "product.html";
 }
 
+function getCheckoutPagePath() {
+  return "/checkout";
+}
+
+function getOwnerWorkspacePath() {
+  return "/owner-workspace";
+}
+
+function isRailwayPreviewHost() {
+  return /\.up\.railway\.app$/i.test(window.location.hostname || "");
+}
+
 function normalizeHomePayload(payload = {}) {
   return {
     hero: {
@@ -1777,7 +1789,7 @@ async function renderProductPage() {
         return;
       }
       addProductToCart(product.id, 1);
-      redirectToPage("Payment.html");
+      redirectToPage(getCheckoutPagePath());
     });
 
     document.getElementById("deliveryCheckButton").addEventListener("click", () => {
@@ -2022,7 +2034,7 @@ async function renderCartPage() {
       setStatus(checkoutStatusNode, "Resolve cart issues before continuing to payment.", "error");
       return;
     }
-    redirectToPage("Payment.html");
+    redirectToPage(getCheckoutPagePath());
   });
 }
 
@@ -2052,8 +2064,10 @@ async function renderPaymentPage() {
   const paymentQrPanel = document.getElementById("paymentQrPanel");
   const savedAddressesNode = document.getElementById("savedDeliveryAddresses");
   const selectedAddressStatus = document.getElementById("selectedAddressStatus");
+  const paymentQrNotice = document.getElementById("paymentQrNotice");
   const customLogoHtml = typeof window.SWIFTCART_PAYMENT_LOGO_HTML === "string" ? window.SWIFTCART_PAYMENT_LOGO_HTML : "";
   const summary = calculateCartSummary(items);
+  const previewHost = isRailwayPreviewHost();
 
   if (logoSlot && customLogoHtml) {
     logoSlot.innerHTML = customLogoHtml;
@@ -2063,7 +2077,9 @@ async function renderPaymentPage() {
     checkoutTrustList.innerHTML = [
       "Saved addresses can be reused instantly.",
       "Live stock validation runs before order placement.",
-      "UPI, card, banking, COD, and EMI flows are ready.",
+      previewHost
+        ? "Railway preview uses a simplified checkout view without public QR payment media."
+        : "UPI, card, banking, COD, and EMI flows are ready.",
       "Order tracking and cancellation remain available after checkout."
     ].map((entry) => `<span class="summary-meta-chip">${escapeHtml(entry)}</span>`).join("");
   }
@@ -2135,7 +2151,12 @@ async function renderPaymentPage() {
   function syncPaymentMode() {
     const method = paymentMethodSelect?.value || "UPI / Card";
     if (paymentQrPanel) {
-      paymentQrPanel.hidden = !method.includes("UPI");
+      paymentQrPanel.hidden = !method.includes("UPI") || previewHost;
+    }
+    if (paymentQrNotice) {
+      paymentQrNotice.textContent = previewHost
+        ? "Railway preview hides direct QR images. Complete the order with Pay Now, then use your custom domain for branded payment media."
+        : "UPI checkout is enabled for this order. Continue with Pay Now to finish the purchase.";
     }
   }
 
@@ -2383,7 +2404,7 @@ async function handleRegistration() {
       saveStoredUser(response.user);
       setStatus(registerStatus, "Account created successfully. Redirecting to your account...", "success");
       setTimeout(() => {
-        redirectToPage(response.user.is_owner ? "Admin.html" : isMerchantUser(response.user) ? "Merchant.html" : "Account_Details.html");
+        redirectToPage(response.user.is_owner ? getOwnerWorkspacePath() : isMerchantUser(response.user) ? "Merchant.html" : "Account_Details.html");
       }, 900);
     } catch (error) {
       setStatus(registerStatus, error.message, "error");
@@ -2494,7 +2515,7 @@ async function handleLogin() {
       saveStoredUser(response.user);
       setStatus(status, "Login successful. Redirecting...", "success");
       setTimeout(() => {
-        redirectToPage(response.user.is_owner ? "Admin.html" : isMerchantUser(response.user) ? "Merchant.html" : "Account_Details.html");
+        redirectToPage(response.user.is_owner ? getOwnerWorkspacePath() : isMerchantUser(response.user) ? "Merchant.html" : "Account_Details.html");
       }, 700);
     } catch (error) {
       setStatus(status, error.message, "error");
@@ -2584,7 +2605,7 @@ async function handleLogin() {
       saveStoredUser(response.user);
       setStatus(loginOtpStatus, "OTP login successful. Redirecting...", "success");
       setTimeout(() => {
-        redirectToPage(response.user.is_owner ? "Admin.html" : isMerchantUser(response.user) ? "Merchant.html" : "Account_Details.html");
+        redirectToPage(response.user.is_owner ? getOwnerWorkspacePath() : isMerchantUser(response.user) ? "Merchant.html" : "Account_Details.html");
       }, 700);
     } catch (error) {
       setStatus(loginOtpStatus, error.message, "error");
