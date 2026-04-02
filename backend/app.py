@@ -6,7 +6,6 @@ from pathlib import Path
 from flask import Flask, jsonify, request, send_from_directory
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from backend.models import init_db
 from backend.routes.orders import orders_bp
 from backend.routes.products import products_bp
 from backend.routes.users import users_bp
@@ -25,8 +24,6 @@ def create_app() -> Flask:
     app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "swiftcart-dev-secret")
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
     UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
-
-    init_db()
 
     app.register_blueprint(products_bp, url_prefix="/api")
     app.register_blueprint(users_bp, url_prefix="/api")

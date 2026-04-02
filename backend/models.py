@@ -106,6 +106,7 @@ else:
 engine = create_engine(DATABASE_URL, **SQLALCHEMY_ENGINE_KWARGS)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 _db_initialized = False
+_db_initializing = False
 
 
 def _uses_sqlite() -> bool:
@@ -345,6 +346,8 @@ class UserChangeLog(Base, TimestampMixin):
 
 @contextmanager
 def session_scope():
+    if not _db_initialized and not _db_initializing:
+        init_db()
     session = SessionLocal()
     try:
         yield session
@@ -584,18 +587,22 @@ def _build_delivery_tracking(order: Order) -> dict:
 
 
 def init_db() -> None:
-    global _db_initialized
+    global _db_initialized, _db_initializing
     if _db_initialized:
         return
 
-    Base.metadata.create_all(bind=engine, checkfirst=True)
-    ensure_schema_updates()
-    seed_data()
-    ensure_owner_account()
-    ensure_merchant_demo_account()
-    if _should_sync_imported_gallery_products_on_startup():
-        sync_imported_gallery_products()
-    _db_initialized = True
+    _db_initializing = True
+    try:
+        Base.metadata.create_all(bind=engine, checkfirst=True)
+        ensure_schema_updates()
+        seed_data()
+        ensure_owner_account()
+        ensure_merchant_demo_account()
+        if _should_sync_imported_gallery_products_on_startup():
+            sync_imported_gallery_products()
+        _db_initialized = True
+    finally:
+        _db_initializing = False
 
 
 def create_otp(session, *, purpose: str, email: str, mobile: str, code: str) -> OtpCode:
