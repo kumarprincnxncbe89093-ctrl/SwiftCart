@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from re import sub
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, create_engine, event, text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, create_engine, event, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
 from werkzeug.security import generate_password_hash
 
@@ -167,6 +167,10 @@ class User(Base, TimestampMixin):
     last_login_platform: Mapped[str] = mapped_column(String(80), default="", nullable=False)
     last_login_ip: Mapped[str] = mapped_column(String(80), default="", nullable=False)
     last_login_method: Mapped[str] = mapped_column(String(40), default="", nullable=False)
+    is_banned: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    ban_reason: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    banned_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    banned_by_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     addresses: Mapped[list["Address"]] = relationship(back_populates="user")
     orders: Mapped[list["Order"]] = relationship(back_populates="user")
@@ -320,6 +324,16 @@ def session_scope():
 
 
 def serialize_product(product: Product) -> dict:
+    stock_value = max(int(product.stock or 0), 0)
+    if stock_value <= 0:
+        stock_status = "Out of Stock"
+        stock_status_key = "out_of_stock"
+    elif stock_value <= 5:
+        stock_status = "Low Stock"
+        stock_status_key = "low_stock"
+    else:
+        stock_status = "In Stock"
+        stock_status_key = "in_stock"
     return {
         "id": product.id,
         "name": product.name,
@@ -329,7 +343,10 @@ def serialize_product(product: Product) -> dict:
         "original_price": product.original_price,
         "rating": product.rating,
         "reviews_count": product.reviews_count,
-        "stock": product.stock,
+        "stock": stock_value,
+        "is_in_stock": stock_value > 0,
+        "stock_status": stock_status,
+        "stock_status_key": stock_status_key,
         "tag": product.tag,
         "description": product.description,
         "highlights": [item.strip() for item in product.highlights.split("|") if item.strip()],
@@ -381,6 +398,11 @@ def serialize_user(user: User) -> dict:
         "last_login_platform": user.last_login_platform,
         "last_login_ip": user.last_login_ip,
         "last_login_method": user.last_login_method,
+        "is_banned": bool(user.is_banned),
+        "ban_reason": user.ban_reason,
+        "banned_at": user.banned_at.isoformat() if user.banned_at else None,
+        "banned_by_user_id": user.banned_by_user_id,
+        "account_status": "Banned" if user.is_banned else "Active",
         "password_history_count": len(get_password_history(user)),
         "address": serialize_address(primary_address) if primary_address else None,
         "addresses": [serialize_address(address) for address in sorted_addresses],
@@ -657,6 +679,22 @@ def ensure_schema_updates() -> None:
         if "last_login_method" not in user_columns:
             connection.execute(
                 text("ALTER TABLE users ADD COLUMN last_login_method VARCHAR(40) NOT NULL DEFAULT ''")
+            )
+        if "is_banned" not in user_columns:
+            connection.execute(
+                text("ALTER TABLE users ADD COLUMN is_banned BOOLEAN NOT NULL DEFAULT 0")
+            )
+        if "ban_reason" not in user_columns:
+            connection.execute(
+                text("ALTER TABLE users ADD COLUMN ban_reason TEXT NOT NULL DEFAULT ''")
+            )
+        if "banned_at" not in user_columns:
+            connection.execute(
+                text("ALTER TABLE users ADD COLUMN banned_at DATETIME")
+            )
+        if "banned_by_user_id" not in user_columns:
+            connection.execute(
+                text("ALTER TABLE users ADD COLUMN banned_by_user_id INTEGER")
             )
         connection.execute(
             text("UPDATE users SET account_type = 'merchant' WHERE account_type = 'seller'")

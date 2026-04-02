@@ -90,6 +90,19 @@ function logoutCurrentUser() {
   redirectToPage("Login.html");
 }
 
+function setAuthFlashMessage(message) {
+  if (!message) return;
+  sessionStorage.setItem("swiftcart-auth-message", String(message));
+}
+
+function consumeAuthFlashMessage() {
+  const message = sessionStorage.getItem("swiftcart-auth-message") || "";
+  if (message) {
+    sessionStorage.removeItem("swiftcart-auth-message");
+  }
+  return message;
+}
+
 function updateCartItemQuantity(productId, quantity) {
   const cart = getCart();
   const item = cart.find((entry) => entry.product_id === productId);
@@ -115,9 +128,21 @@ async function apiFetch(path, options = {}) {
   });
 
   const text = await response.text();
-  const data = text ? JSON.parse(text) : null;
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = null;
+  }
 
   if (!response.ok) {
+    if (data?.force_logout) {
+      setAuthFlashMessage(data?.message || "Your session is no longer active.");
+      saveStoredUser(null);
+      if (!window.location.pathname.toLowerCase().endsWith("login.html")) {
+        redirectToPage("Login.html");
+      }
+    }
     throw new Error(data?.message || "Request failed");
   }
 

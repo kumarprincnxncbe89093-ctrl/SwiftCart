@@ -65,6 +65,29 @@ def _normalize_secondary_categories(raw_value) -> str:
     return "|".join(cleaned)
 
 
+def _normalize_price_values(price_value, original_price_value) -> tuple[float, float]:
+    try:
+        price = round(float(price_value), 2)
+        original_price = round(float(original_price_value), 2)
+    except (TypeError, ValueError) as error:
+        raise ValueError("Price and original price must be valid numbers.") from error
+
+    if price <= 0 or original_price <= 0:
+        raise ValueError("Price and original price must be greater than zero.")
+
+    normalized_original_price = max(price, original_price)
+    normalized_price = min(price, normalized_original_price)
+    return normalized_price, normalized_original_price
+
+
+def _normalize_stock_value(raw_stock) -> int:
+    try:
+        stock = int(raw_stock)
+    except (TypeError, ValueError) as error:
+        raise ValueError("Stock must be a whole number.") from error
+    return max(stock, 0)
+
+
 def _build_bank_offer(category_name: str, index: int) -> dict:
     bank_names = ["HDFC Bank", "ICICI Bank", "Axis Bank", "SBI Cards", "Kotak Bank", "IndusInd Bank"]
     discounts = [10, 12, 15, 8, 5, 7]
@@ -443,6 +466,9 @@ def add_review(slug: str):
 
         author_user_id = payload.get("user_id")
         author_user = session.query(User).filter(User.id == int(author_user_id)).first() if author_user_id else None
+        if author_user and author_user.is_banned:
+            reason = str(author_user.ban_reason or "").strip() or "Contact the owner for reactivation."
+            return jsonify({"message": f"Your account has been banned. {reason}", "force_logout": True}), 403
 
         review = Review(
             product_id=product.id,
@@ -890,18 +916,24 @@ def merchant_create_product():
         merchant, error = _require_merchant(session)
         if error:
             return error
-        existing = session.query(Product).filter(Product.slug == payload["slug"].strip()).first()
+        normalized_slug = _normalized_slug(payload["slug"])
+        existing = session.query(Product).filter(Product.slug == normalized_slug).first()
         if existing:
             return jsonify({"message": "A product with this slug already exists."}), 409
+        try:
+            price, original_price = _normalize_price_values(payload["price"], payload["original_price"])
+            stock = _normalize_stock_value(payload["stock"])
+        except ValueError as error:
+            return jsonify({"message": str(error)}), 400
 
         product = Product(
             name=payload["name"].strip(),
-            slug=payload["slug"].strip(),
+            slug=normalized_slug,
             category_id=int(payload["category_id"]),
             image=payload["image"].strip(),
-            price=float(payload["price"]),
-            original_price=float(payload["original_price"]),
-            stock=int(payload["stock"]),
+            price=price,
+            original_price=original_price,
+            stock=stock,
             rating=float(payload.get("rating", 4.0)),
             reviews_count=int(payload.get("reviews_count", 0)),
             tag=payload.get("tag", "").strip() or "Merchant Pick",
@@ -944,14 +976,32 @@ def merchant_update_product(product_id: int):
             if field in payload:
                 setattr(product, field, str(payload[field]).strip())
 
+        if "slug" in payload:
+            normalized_slug = _normalized_slug(payload["slug"])
+            existing = (
+                session.query(Product)
+                .filter(Product.slug == normalized_slug, Product.id != product.id)
+                .first()
+            )
+            if existing:
+                return jsonify({"message": "Another product already uses this slug."}), 409
+            product.slug = normalized_slug
+
         if "category_id" in payload:
             product.category_id = int(payload["category_id"])
-        if "price" in payload:
-            product.price = float(payload["price"])
-        if "original_price" in payload:
-            product.original_price = float(payload["original_price"])
+        if "price" in payload or "original_price" in payload:
+            try:
+                product.price, product.original_price = _normalize_price_values(
+                    payload.get("price", product.price),
+                    payload.get("original_price", product.original_price),
+                )
+            except ValueError as error:
+                return jsonify({"message": str(error)}), 400
         if "stock" in payload:
-            product.stock = int(payload["stock"])
+            try:
+                product.stock = _normalize_stock_value(payload["stock"])
+            except ValueError as error:
+                return jsonify({"message": str(error)}), 400
         if "featured" in payload:
             product.featured = bool(payload["featured"])
         if "deal_of_the_day" in payload:
@@ -982,9 +1032,22 @@ def admin_dashboard():
 
         _expire_category_discounts(session)
         category_count = session.query(Category).count()
-        product_count = session.query(Product).count()
-        in_stock_count = session.query(Product).filter(Product.stock > 0).count()
-        featured_count = session.query(Product).filter(Product.featured.is_(True)).count()
+        all_products = (
+            session.query(Product)
+            .options(joinedload(Product.category), joinedload(Product.seller))
+            .order_by(Product.created_at.desc())
+            .all()
+        )
+        product_count = len(all_products)
+        in_stock_count = sum(1 for product in all_products if product.stock > 0)
+        out_of_stock_count = sum(1 for product in all_products if product.stock <= 0)
+        low_stock_count = sum(1 for product in all_products if 0 < product.stock <= 5)
+        discounted_product_count = sum(
+            1 for product in all_products if float(product.original_price or 0) > float(product.price or 0)
+        )
+        seller_listed_count = sum(1 for product in all_products if product.seller_id is not None)
+        managed_catalog_count = product_count - seller_listed_count
+        featured_count = sum(1 for product in all_products if product.featured)
         user_count = session.query(User).count()
         order_count = session.query(Order).count()
         revenue = session.query(Order).all()
@@ -1091,15 +1154,24 @@ def admin_dashboard():
                 "category_id": category.id,
                 "category_name": category.name,
                 "products": 0,
+                "in_stock_products": 0,
+                "out_of_stock_products": 0,
+                "low_stock_products": 0,
                 "ordered_units": 0,
                 "cancelled_units": 0,
                 "revenue": 0.0,
             }
             for category in category_lookup.values()
         }
-        for product in session.query(Product).all():
+        for product in all_products:
             if product.category_id in category_performance_map:
                 category_performance_map[product.category_id]["products"] += 1
+                if product.stock <= 0:
+                    category_performance_map[product.category_id]["out_of_stock_products"] += 1
+                else:
+                    category_performance_map[product.category_id]["in_stock_products"] += 1
+                if 0 < product.stock <= 5:
+                    category_performance_map[product.category_id]["low_stock_products"] += 1
         for order in all_orders:
             for item in order.items:
                 category_id = item.product.category_id
@@ -1185,6 +1257,8 @@ def admin_dashboard():
                     "categories": category_count,
                     "products": product_count,
                     "in_stock_products": in_stock_count,
+                    "out_of_stock_products": out_of_stock_count,
+                    "low_stock_products": low_stock_count,
                     "featured_products": featured_count,
                     "users": user_count,
                     "orders": order_count,
@@ -1193,6 +1267,11 @@ def admin_dashboard():
                     "revenue": round(sum(order.total_amount for order in revenue), 2),
                     "cancelled_orders": len(cancelled_orders),
                     "chat_messages": len(all_chat_messages),
+                },
+                "inventory": {
+                    "seller_listed_products": seller_listed_count,
+                    "platform_managed_products": managed_catalog_count,
+                    "discounted_products": discounted_product_count,
                 },
                 "growth": {
                     "users_last_7_days": len(users_last_7),
@@ -1595,15 +1674,20 @@ def admin_create_product():
         existing = session.query(Product).filter(Product.slug == normalized_slug).first()
         if existing:
             return jsonify({"message": "A product with this slug already exists."}), 409
+        try:
+            price, original_price = _normalize_price_values(payload["price"], payload["original_price"])
+            stock = _normalize_stock_value(payload["stock"])
+        except ValueError as error:
+            return jsonify({"message": str(error)}), 400
 
         product = Product(
             name=_sentence_case(payload["name"]),
             slug=normalized_slug,
             category_id=int(payload["category_id"]),
             image=payload["image"].strip(),
-            price=float(payload["price"]),
-            original_price=float(payload["original_price"]),
-            stock=int(payload["stock"]),
+            price=price,
+            original_price=original_price,
+            stock=stock,
             rating=float(payload.get("rating", 4.0)),
             reviews_count=int(payload.get("reviews_count", 0)),
             tag=_sentence_case(payload.get("tag", "")) or "New Arrival",
@@ -1645,18 +1729,32 @@ def admin_update_product(product_id: int):
                     value = _sentence_case(value)
                 elif field == "slug":
                     value = _normalized_slug(value)
+                    existing = (
+                        session.query(Product)
+                        .filter(Product.slug == value, Product.id != product.id)
+                        .first()
+                    )
+                    if existing:
+                        return jsonify({"message": "Another product already uses this slug."}), 409
                 elif field in {"tag", "description", "delivery_note"}:
                     value = _sentence_case(value)
                 setattr(product, field, value)
 
         if "category_id" in payload:
             product.category_id = int(payload["category_id"])
-        if "price" in payload:
-            product.price = float(payload["price"])
-        if "original_price" in payload:
-            product.original_price = float(payload["original_price"])
+        if "price" in payload or "original_price" in payload:
+            try:
+                product.price, product.original_price = _normalize_price_values(
+                    payload.get("price", product.price),
+                    payload.get("original_price", product.original_price),
+                )
+            except ValueError as error:
+                return jsonify({"message": str(error)}), 400
         if "stock" in payload:
-            product.stock = int(payload["stock"])
+            try:
+                product.stock = _normalize_stock_value(payload["stock"])
+            except ValueError as error:
+                return jsonify({"message": str(error)}), 400
         if "rating" in payload:
             product.rating = float(payload["rating"])
         if "reviews_count" in payload:

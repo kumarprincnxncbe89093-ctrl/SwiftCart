@@ -10,4 +10,4 @@ graceful_timeout = int(os.getenv("GUNICORN_GRACEFUL_TIMEOUT", "30"))
 keepalive = int(os.getenv("GUNICORN_KEEPALIVE", "5"))
 accesslog = "-"
 errorlog = "-"
-worker_tmp_dir = "/dev/shm"
+worker_tmp_dir = "/dev/shm" if os.path.exists("/dev/shm") else "/tmp"
