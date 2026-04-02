@@ -422,6 +422,32 @@ def home_payload():
             .limit(12)
             .all()
         )
+
+        if not featured:
+            featured = (
+                session.query(Product)
+                .options(joinedload(Product.category), joinedload(Product.seller))
+                .order_by(Product.rating.desc(), Product.reviews_count.desc(), Product.created_at.desc())
+                .limit(8)
+                .all()
+            )
+        if not deals:
+            deals = (
+                session.query(Product)
+                .options(joinedload(Product.category), joinedload(Product.seller))
+                .filter(Product.original_price > Product.price)
+                .order_by(Product.rating.desc(), Product.reviews_count.desc(), Product.created_at.desc())
+                .limit(6)
+                .all()
+            )
+        if not newest:
+            newest = (
+                session.query(Product)
+                .options(joinedload(Product.category), joinedload(Product.seller))
+                .order_by(Product.rating.desc(), Product.reviews_count.desc(), Product.created_at.desc())
+                .limit(10)
+                .all()
+            )
         return jsonify(
             {
                 "hero": {

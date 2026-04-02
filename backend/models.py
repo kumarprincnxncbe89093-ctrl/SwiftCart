@@ -1041,39 +1041,55 @@ def sync_imported_gallery_products() -> None:
 
 def seed_data() -> None:
     with session_scope() as session:
-        if session.query(Category).count() > 0:
-            return
-
-        categories = [
-            Category(
-                name="Ethnic Wear",
-                slug="ethnic-wear",
-                description="Festive kurtas, premium ethnic fits, and occasion-ready looks.",
-                banner_title="Wedding and festive styles",
-            ),
-            Category(
-                name="Shirts & Tees",
-                slug="shirts-tees",
-                description="Sharp shirts and printed casual tees for everyday rotation.",
-                banner_title="Fresh casual and office fits",
-            ),
-            Category(
-                name="Footwear",
-                slug="footwear",
-                description="Durable footwear and outdoor-ready utility styles.",
-                banner_title="Comfort with grip",
-            ),
-            Category(
-                name="Accessories",
-                slug="accessories",
-                description="Reliable finishing touches for daily wear.",
-                banner_title="Watches and styling essentials",
-            ),
+        category_rows = [
+            {
+                "name": "Ethnic Wear",
+                "slug": "ethnic-wear",
+                "description": "Festive kurtas, premium ethnic fits, and occasion-ready looks.",
+                "banner_title": "Wedding and festive styles",
+            },
+            {
+                "name": "Shirts & Tees",
+                "slug": "shirts-tees",
+                "description": "Sharp shirts and printed casual tees for everyday rotation.",
+                "banner_title": "Fresh casual and office fits",
+            },
+            {
+                "name": "Footwear",
+                "slug": "footwear",
+                "description": "Durable footwear and outdoor-ready utility styles.",
+                "banner_title": "Comfort with grip",
+            },
+            {
+                "name": "Accessories",
+                "slug": "accessories",
+                "description": "Reliable finishing touches for daily wear.",
+                "banner_title": "Watches and styling essentials",
+            },
         ]
-        session.add_all(categories)
-        session.flush()
 
-        category_map = {category.slug: category.id for category in categories}
+        existing_categories = {
+            category.slug: category
+            for category in session.query(Category).all()
+        }
+        for row in category_rows:
+            category = existing_categories.get(row["slug"])
+            if category:
+                if not category.description:
+                    category.description = row["description"]
+                if not category.banner_title:
+                    category.banner_title = row["banner_title"]
+                continue
+            category = Category(**row)
+            session.add(category)
+            session.flush()
+            existing_categories[row["slug"]] = category
+
+        category_map = {
+            row["slug"]: existing_categories[row["slug"]].id
+            for row in category_rows
+            if row["slug"] in existing_categories
+        }
         product_rows = [
             {
                 "name": "Classic Kurta",
@@ -1329,8 +1345,16 @@ def seed_data() -> None:
             },
         ]
 
-        products = [
-            Product(
+        existing_products = {
+            product.slug: product
+            for product in session.query(Product).all()
+        }
+        products: list[Product] = []
+        for row in product_rows:
+            if row["slug"] in existing_products:
+                products.append(existing_products[row["slug"]])
+                continue
+            product = Product(
                 category_id=category_map[row["category_slug"]],
                 name=row["name"],
                 slug=row["slug"],
@@ -1348,36 +1372,59 @@ def seed_data() -> None:
                 featured=row["featured"],
                 deal_of_the_day=row["deal_of_the_day"],
             )
-            for row in product_rows
-        ]
-        session.add_all(products)
+            session.add(product)
+            products.append(product)
+            existing_products[row["slug"]] = product
         session.flush()
 
-        demo_user = User(
-            first_name="Prince",
-            last_name="Kumar",
-            email="demo@swiftcart.com",
-            mobile="+918229069530",
-            password_hash=generate_password_hash("SwiftCart@123"),
-            unique_code=generate_unique_code(session),
-            account_type="buyer",
-            password_changed_at=datetime.utcnow(),
-        )
-        session.add(demo_user)
-        session.flush()
-
-        session.add(
-            Address(
-                user_id=demo_user.id,
-                label="Home",
-                street="Embassy Tech Village, Outer Ring Road",
-                city="Bengaluru",
-                state="Karnataka",
-                pincode="560103",
-                landmark="Near Tech Park Gate 2",
-                is_default=True,
+        if not session.query(Product.id).filter(Product.featured.is_(True)).first():
+            fallback_featured = (
+                session.query(Product)
+                .order_by(Product.rating.desc(), Product.reviews_count.desc(), Product.created_at.asc())
+                .limit(8)
+                .all()
             )
-        )
+            for product in fallback_featured:
+                product.featured = True
+
+        if not session.query(Product.id).filter(Product.deal_of_the_day.is_(True)).first():
+            fallback_deals = (
+                session.query(Product)
+                .order_by(Product.rating.desc(), Product.reviews_count.desc(), Product.created_at.asc())
+                .limit(4)
+                .all()
+            )
+            for product in fallback_deals:
+                product.deal_of_the_day = True
+
+        demo_user = session.query(User).filter(User.email == "demo@swiftcart.com").first()
+        if not demo_user:
+            demo_user = User(
+                first_name="Prince",
+                last_name="Kumar",
+                email="demo@swiftcart.com",
+                mobile="+918229069530",
+                password_hash=generate_password_hash("SwiftCart@123"),
+                unique_code=generate_unique_code(session),
+                account_type="buyer",
+                password_changed_at=datetime.utcnow(),
+            )
+            session.add(demo_user)
+            session.flush()
+
+        if demo_user and not demo_user.addresses:
+            session.add(
+                Address(
+                    user_id=demo_user.id,
+                    label="Home",
+                    street="Embassy Tech Village, Outer Ring Road",
+                    city="Bengaluru",
+                    state="Karnataka",
+                    pincode="560103",
+                    landmark="Near Tech Park Gate 2",
+                    is_default=True,
+                )
+            )
 
         review_rows = [
             ("bandhani-kurta", "Aarav", 4.0, "Comfortable and festive", "The print looks vibrant and the fabric feels easy for long events."),
@@ -1385,8 +1432,21 @@ def seed_data() -> None:
             ("woodland-style", "Vikram", 4.5, "Strong grip", "Feels sturdy outdoors and the sole has a lot of grip."),
             ("sonata-watch", "Neha", 4.0, "Clean and classy", "A neat watch for daily wear with a smart dial size."),
         ]
+        existing_review_keys = {
+            (
+                review.product_id,
+                str(review.author_name or "").strip().lower(),
+                str(review.title or "").strip().lower(),
+            )
+            for review in session.query(Review).all()
+        }
         for slug, author, rating, title, comment in review_rows:
-            product = next(item for item in products if item.slug == slug)
+            product = existing_products.get(slug)
+            if not product:
+                continue
+            review_key = (product.id, author.strip().lower(), title.strip().lower())
+            if review_key in existing_review_keys:
+                continue
             session.add(
                 Review(
                     product_id=product.id,
@@ -1396,6 +1456,7 @@ def seed_data() -> None:
                     comment=comment,
                 )
             )
+            existing_review_keys.add(review_key)
 
 
 def ensure_owner_account() -> None:
