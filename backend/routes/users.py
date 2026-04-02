@@ -87,7 +87,6 @@ def _ensure_user_is_active(user: User):
 
 
 def _sync_owner_credentials_if_needed(user: User, password: str) -> bool:
-    normalized_owner_email = OWNER_EMAIL.strip().lower()
     configured_owner_password = OWNER_PASSWORD.strip()
     if not configured_owner_password:
         return False
@@ -95,11 +94,11 @@ def _sync_owner_credentials_if_needed(user: User, password: str) -> bool:
         return False
     if str(user.account_type or "").strip().lower() != "owner":
         return False
-    if str(user.email or "").strip().lower() != normalized_owner_email:
-        return False
     if password != configured_owner_password:
         return False
 
+    if OWNER_EMAIL.strip() and str(user.email or "").strip().lower() != OWNER_EMAIL.strip().lower():
+        user.email = OWNER_EMAIL.strip().lower()
     user.password_hash = generate_password_hash(configured_owner_password)
     user.password_changed_at = datetime.utcnow()
     return True
