@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from flask import Blueprint, jsonify, request
+from sqlalchemy import func, or_
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
@@ -86,21 +87,96 @@ def _ensure_user_is_active(user: User):
     return None
 
 
-def _sync_owner_credentials_if_needed(user: User, password: str) -> bool:
+def _repair_or_bootstrap_owner_account(session, email: str, password: str) -> User | None:
+    normalized_owner_email = OWNER_EMAIL.strip().lower()
+    configured_owner_password = OWNER_PASSWORD.strip()
+    if not normalized_owner_email or not configured_owner_password:
+        return None
+    if str(email or "").strip().lower() != normalized_owner_email:
+        return None
+    if password != configured_owner_password:
+        return None
+
+    owner = (
+        session.query(User)
+        .filter(
+            or_(
+                func.lower(User.email) == normalized_owner_email,
+                User.account_type == "owner",
+            )
+        )
+        .order_by(User.id.asc())
+        .first()
+    )
+
+    if owner is None:
+        owner = User(
+            first_name="Prince",
+            last_name="Kumar",
+            email=normalized_owner_email,
+            mobile="+910000000000",
+            password_hash=generate_password_hash(configured_owner_password),
+            unique_code=generate_unique_code(session),
+            account_type="owner",
+            shop_name="SwiftCart Marketplace",
+            gstin="29OWNER0000X1Z0",
+            password_changed_at=datetime.utcnow(),
+        )
+        session.add(owner)
+        session.flush()
+    else:
+        owner.account_type = "owner"
+        owner.email = normalized_owner_email
+        owner.password_hash = generate_password_hash(configured_owner_password)
+        owner.password_changed_at = datetime.utcnow()
+        if not owner.first_name:
+            owner.first_name = "Prince"
+        if not owner.last_name:
+            owner.last_name = "Kumar"
+        if not owner.mobile:
+            owner.mobile = "+910000000000"
+        if not owner.unique_code:
+            owner.unique_code = generate_unique_code(session)
+        if not owner.shop_name:
+            owner.shop_name = "SwiftCart Marketplace"
+        if not owner.gstin:
+            owner.gstin = "29OWNER0000X1Z0"
+
+    if not owner.addresses:
+        session.add(
+            Address(
+                user_id=owner.id,
+                label="HQ",
+                street="SwiftCart HQ, Bengaluru",
+                city="Bengaluru",
+                state="Karnataka",
+                pincode="560001",
+                landmark="Owner operations desk",
+                is_default=True,
+            )
+        )
+
+    return owner
+
+
+def _sync_owner_credentials_if_needed(session, user: User, password: str) -> bool:
+    normalized_owner_email = OWNER_EMAIL.strip().lower()
     configured_owner_password = OWNER_PASSWORD.strip()
     if not configured_owner_password:
         return False
     if not user:
         return False
-    if str(user.account_type or "").strip().lower() != "owner":
-        return False
     if password != configured_owner_password:
         return False
-
-    if OWNER_EMAIL.strip() and str(user.email or "").strip().lower() != OWNER_EMAIL.strip().lower():
-        user.email = OWNER_EMAIL.strip().lower()
+    if str(user.account_type or "").strip().lower() != "owner" and str(user.email or "").strip().lower() != normalized_owner_email:
+        return False
+    if normalized_owner_email and str(user.email or "").strip().lower() != normalized_owner_email:
+        user.email = normalized_owner_email
+    user.account_type = "owner"
     user.password_hash = generate_password_hash(configured_owner_password)
     user.password_changed_at = datetime.utcnow()
+    if not user.unique_code:
+        user.unique_code = generate_unique_code(session)
     return True
 
 
@@ -584,13 +660,16 @@ def login():
         return jsonify({"message": captcha_message}), 400
 
     with session_scope() as session:
-        user = session.query(User).filter(User.email == email).first()
-        if not user:
-            return jsonify({"message": "Invalid email or password."}), 401
-        password_ok = check_password_hash(user.password_hash, password)
+        user = session.query(User).filter(func.lower(User.email) == email).first()
+        password_ok = bool(user and check_password_hash(user.password_hash, password))
         if not password_ok:
-            password_ok = _sync_owner_credentials_if_needed(user, password)
-        if not password_ok:
+            repaired_owner = _repair_or_bootstrap_owner_account(session, email, password)
+            if repaired_owner:
+                user = repaired_owner
+                password_ok = True
+        if user and not password_ok:
+            password_ok = _sync_owner_credentials_if_needed(session, user, password)
+        if not user or not password_ok:
             return jsonify({"message": "Invalid email or password."}), 401
         banned_error = _ensure_user_is_active(user)
         if banned_error:
