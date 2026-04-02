@@ -419,6 +419,7 @@ def session_scope():
 
 
 def serialize_product(product: Product) -> dict:
+    category = getattr(product, "category", None)
     stock_value = max(int(product.stock or 0), 0)
     if stock_value <= 0:
         stock_status = "Out of Stock"
@@ -433,7 +434,7 @@ def serialize_product(product: Product) -> dict:
         "id": product.id,
         "name": product.name,
         "slug": product.slug,
-        "image": product.image,
+        "image": product.image or "images/swift.png",
         "price": product.price,
         "original_price": product.original_price,
         "rating": product.rating,
@@ -444,8 +445,8 @@ def serialize_product(product: Product) -> dict:
         "stock_status_key": stock_status_key,
         "tag": product.tag,
         "description": product.description,
-        "highlights": [item.strip() for item in product.highlights.split("|") if item.strip()],
-        "specifications": _parse_key_value_blob(product.specifications),
+        "highlights": [item.strip() for item in str(product.highlights or "").split("|") if item.strip()],
+        "specifications": _parse_key_value_blob(product.specifications or ""),
         "secondary_categories": [item.strip() for item in (product.secondary_categories or "").split("|") if item.strip()],
         "delivery_note": product.delivery_note,
         "featured": product.featured,
@@ -458,9 +459,9 @@ def serialize_product(product: Product) -> dict:
         ),
         "seller_shop_name": product.seller.shop_name if getattr(product, "seller", None) else "",
         "category": {
-            "id": product.category.id,
-            "name": product.category.name,
-            "slug": product.category.slug,
+            "id": category.id if category else product.category_id,
+            "name": category.name if category else "Uncategorized",
+            "slug": category.slug if category else "uncategorized",
         },
         "discount_percent": int(
             round((1 - (product.price / product.original_price)) * 100)
@@ -524,6 +525,8 @@ def serialize_address(address: Address | None) -> dict | None:
 def serialize_order(order: Order) -> dict:
     tracking = _build_delivery_tracking(order)
     effective_status = _resolve_order_status(order, tracking["current_status"])
+    order_status = str(order.status or "Placed")
+    customer = getattr(order, "user", None)
     return {
         "id": order.id,
         "status": effective_status,
@@ -537,25 +540,25 @@ def serialize_order(order: Order) -> dict:
         "created_date": order.created_at.strftime("%d %b %Y"),
         "created_time": order.created_at.strftime("%I:%M %p"),
         "customer": {
-            "id": order.user.id,
-            "full_name": f"{order.user.first_name} {order.user.last_name}".strip(),
-            "email": order.user.email,
-            "mobile": order.user.mobile,
-            "account_type": order.user.account_type,
-            "shop_name": order.user.shop_name,
+            "id": customer.id if customer else order.user_id,
+            "full_name": f"{customer.first_name} {customer.last_name}".strip() if customer else "Removed customer account",
+            "email": customer.email if customer else "Account unavailable",
+            "mobile": customer.mobile if customer else "",
+            "account_type": customer.account_type if customer else "unknown",
+            "shop_name": customer.shop_name if customer else "",
         },
         "delivery_tracking": tracking,
         "items": [
             {
                 "order_item_id": item.id,
                 "product_id": item.product_id,
-                "name": item.product.name,
-                "slug": item.product.slug,
-                "image": item.product.image,
+                "name": item.product.name if item.product else f"Removed Product #{item.product_id}",
+                "slug": item.product.slug if item.product else "",
+                "image": item.product.image if item.product and item.product.image else "images/swift.png",
                 "quantity": item.quantity,
                 "unit_price": item.unit_price,
                 "line_total": item.quantity * item.unit_price,
-                "status": item.status or ("Cancelled" if order.status.lower() == "cancelled" else order.status),
+                "status": item.status or ("Cancelled" if order_status.lower() == "cancelled" else order_status),
                 "cancel_reason": item.cancel_reason,
                 "canceled_at": item.canceled_at.isoformat() if item.canceled_at else None,
             }
@@ -565,8 +568,9 @@ def serialize_order(order: Order) -> dict:
 
 
 def _resolve_order_status(order: Order, fallback_status: str) -> str:
+    order_status = str(order.status or "Placed")
     item_statuses = [
-        (item.status or order.status or "Placed").strip().lower()
+        (item.status or order_status or "Placed").strip().lower()
         for item in order.items
     ]
     if not item_statuses:
@@ -580,7 +584,8 @@ def _resolve_order_status(order: Order, fallback_status: str) -> str:
 
 
 def _build_delivery_tracking(order: Order) -> dict:
-    if order.status.lower() == "cancelled":
+    order_status = str(order.status or "Placed")
+    if order_status.lower() == "cancelled":
         cancelled_at = order.canceled_at or order.updated_at or order.created_at
         return {
             "current_status": "Cancelled",

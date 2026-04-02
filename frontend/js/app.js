@@ -1,3 +1,28 @@
+const DEFAULT_ADMIN_EXPANDED_SECTIONS = {
+  products: false,
+  users: false,
+  codes: false,
+  bankOffers: false,
+  orders: false,
+  reviews: false,
+  linked: false,
+  chats: false,
+  changes: false,
+  tables: false,
+  "panel:finance": true,
+  "panel:category": true,
+  "panel:bankOffers": true,
+  "panel:products": true,
+  "panel:users": true,
+  "panel:codes": true,
+  "panel:orders": true,
+  "panel:reviews": true,
+  "panel:linked": true,
+  "panel:changes": true,
+  "panel:chats": true,
+  "panel:database": true
+};
+
 const state = {
   home: null,
   currentProduct: null,
@@ -12,18 +37,7 @@ const state = {
   chatbotMessages: [],
   chatResetTimer: null,
   chatbotSetOpen: null,
-  adminExpandedSections: {
-    products: false,
-    users: false,
-    codes: false,
-    bankOffers: false,
-    orders: false,
-    reviews: false,
-    linked: false,
-    chats: false,
-    changes: false,
-    tables: false
-  }
+  adminExpandedSections: { ...DEFAULT_ADMIN_EXPANDED_SECTIONS }
 };
 const HOME_CACHE_KEY = "swiftcart-home-cache-v1";
 
@@ -31,6 +45,22 @@ function setStatus(node, message, tone = "neutral") {
   if (!node) return;
   node.textContent = message;
   node.dataset.state = tone;
+}
+
+function getPageStatusNode(page = document.body.dataset.page || "") {
+  const statusIdByPage = {
+    account: "profileUpdateStatus",
+    admin: "adminStatus",
+    cart: "cartCheckoutStatus",
+    home: "catalogMessage",
+    login: "loginStatus",
+    merchant: "merchantStatus",
+    orders: "ordersStatus",
+    payment: "paymentStatus",
+    register: "registerStatus",
+    wishlist: "wishlistStatus"
+  };
+  return document.getElementById(statusIdByPage[page] || "pageStatus");
 }
 
 function delay(ms) {
@@ -58,6 +88,103 @@ function normalizeHomePayload(payload = {}) {
     deal_of_the_day: Array.isArray(payload?.deal_of_the_day) ? payload.deal_of_the_day : [],
     imported_products: Array.isArray(payload?.imported_products) ? payload.imported_products : [],
     new_arrivals: Array.isArray(payload?.new_arrivals) ? payload.new_arrivals : [],
+  };
+}
+
+function buildEmptyAdminDashboard(user = null) {
+  const fallbackName = [user?.first_name, user?.last_name].filter(Boolean).join(" ").trim() || user?.full_name || user?.email || "Owner";
+  return {
+    owner: {
+      full_name: fallbackName,
+      email: user?.email || "Owner account",
+      unique_code: user?.unique_code || "",
+      created_at: user?.created_at || null
+    },
+    totals: {
+      categories: 0,
+      products: 0,
+      in_stock_products: 0,
+      out_of_stock_products: 0,
+      low_stock_products: 0,
+      featured_products: 0,
+      users: 0,
+      orders: 0,
+      wishlist_items: 0,
+      reviews: 0,
+      revenue: 0,
+      cancelled_orders: 0,
+      chat_messages: 0
+    },
+    inventory: {
+      seller_listed_products: 0,
+      platform_managed_products: 0,
+      discounted_products: 0
+    },
+    growth: {
+      users_last_7_days: 0,
+      users_last_30_days: 0,
+      orders_last_7_days: 0,
+      orders_last_30_days: 0,
+      revenue_last_7_days: 0,
+      revenue_last_30_days: 0,
+      merchant_accounts: 0
+    },
+    order_activity: [],
+    hourly_activity: [],
+    finance_series: [],
+    order_series: [],
+    cancelled_series: [],
+    category_performance: [],
+    bank_offers: [],
+    active_category_discounts: [],
+    users: [],
+    orders: [],
+    reviews: [],
+    linked_mobile_accounts: [],
+    chat_messages: [],
+    user_change_logs: []
+  };
+}
+
+function normalizeAdminDashboardPayload(payload = {}, user = null) {
+  const fallback = buildEmptyAdminDashboard(user);
+  return {
+    ...fallback,
+    ...(payload || {}),
+    owner: { ...fallback.owner, ...(payload?.owner || {}) },
+    totals: { ...fallback.totals, ...(payload?.totals || {}) },
+    inventory: { ...fallback.inventory, ...(payload?.inventory || {}) },
+    growth: { ...fallback.growth, ...(payload?.growth || {}) },
+    order_activity: Array.isArray(payload?.order_activity) ? payload.order_activity : fallback.order_activity,
+    hourly_activity: Array.isArray(payload?.hourly_activity) ? payload.hourly_activity : fallback.hourly_activity,
+    finance_series: Array.isArray(payload?.finance_series) ? payload.finance_series : fallback.finance_series,
+    order_series: Array.isArray(payload?.order_series) ? payload.order_series : fallback.order_series,
+    cancelled_series: Array.isArray(payload?.cancelled_series) ? payload.cancelled_series : fallback.cancelled_series,
+    category_performance: Array.isArray(payload?.category_performance) ? payload.category_performance : fallback.category_performance,
+    bank_offers: Array.isArray(payload?.bank_offers) ? payload.bank_offers : fallback.bank_offers,
+    active_category_discounts: Array.isArray(payload?.active_category_discounts) ? payload.active_category_discounts : fallback.active_category_discounts,
+    users: Array.isArray(payload?.users) ? payload.users : fallback.users,
+    orders: Array.isArray(payload?.orders) ? payload.orders : fallback.orders,
+    reviews: Array.isArray(payload?.reviews) ? payload.reviews : fallback.reviews,
+    linked_mobile_accounts: Array.isArray(payload?.linked_mobile_accounts) ? payload.linked_mobile_accounts : fallback.linked_mobile_accounts,
+    chat_messages: Array.isArray(payload?.chat_messages) ? payload.chat_messages : fallback.chat_messages,
+    user_change_logs: Array.isArray(payload?.user_change_logs) ? payload.user_change_logs : fallback.user_change_logs
+  };
+}
+
+function normalizeAdminCatalogPayload(payload = {}) {
+  return {
+    owner: payload?.owner || null,
+    products: Array.isArray(payload?.products) ? payload.products : [],
+    categories: Array.isArray(payload?.categories) ? payload.categories : []
+  };
+}
+
+function normalizeAdminDbOverview(payload = {}) {
+  return {
+    owner: payload?.owner || null,
+    database_path: String(payload?.database_path || "Unavailable"),
+    tables: Array.isArray(payload?.tables) ? payload.tables : []
   };
 }
 
@@ -968,6 +1095,9 @@ function renderOrderLineItem(order, item) {
 }
 
 function renderAnalyticsBars(entries, getLabel, getValue, getMeta) {
+  if (!entries.length) {
+    return "<p class=\"empty-copy\">No analytics data yet.</p>";
+  }
   const maxValue = Math.max(...entries.map((entry) => getValue(entry)), 1);
   return entries.map((entry) => {
     const value = getValue(entry);
@@ -2905,7 +3035,15 @@ async function renderOrdersPage() {
     return;
   }
 
-  const orders = await apiFetch(`/users/${user.id}/orders`);
+  let orders = [];
+  try {
+    orders = await apiFetch(`/users/${user.id}/orders`);
+  } catch (error) {
+    if (statsNode) statsNode.innerHTML = "";
+    container.innerHTML = "<p class=\"empty-copy\">We could not load your orders right now. Please refresh in a moment.</p>";
+    setStatus(ordersStatus, error.message || "Order history could not be loaded.", "error");
+    return;
+  }
   if (statsNode) {
     const delivered = orders.filter((order) => order.status === "Delivered").length;
     const active = orders.filter((order) => !["Cancelled", "Delivered"].includes(order.status)).length;
@@ -3209,15 +3347,45 @@ async function renderAdminPage() {
     return;
   }
 
+  if (!state.adminExpandedSections) {
+    state.adminExpandedSections = { ...DEFAULT_ADMIN_EXPANDED_SECTIONS };
+  }
+
   document.getElementById("adminLogoutButton")?.addEventListener("click", () => {
     logoutCurrentUser();
   });
+  const status = document.getElementById("adminStatus");
+  setStatus(status, "Loading owner dashboard…", "neutral");
 
-  const [dashboard, catalog, dbOverview] = await Promise.all([
+  const [dashboardResult, catalogResult, dbOverviewResult] = await Promise.allSettled([
     apiFetch(`/admin/dashboard${buildOwnerQuery(user)}`),
     apiFetch(`/admin/products${buildOwnerQuery(user)}`),
     apiFetch(`/admin/database/overview${buildOwnerQuery(user)}`)
   ]);
+
+  const dashboard = dashboardResult.status === "fulfilled"
+    ? normalizeAdminDashboardPayload(dashboardResult.value, user)
+    : buildEmptyAdminDashboard(user);
+  const catalog = catalogResult.status === "fulfilled"
+    ? normalizeAdminCatalogPayload(catalogResult.value)
+    : normalizeAdminCatalogPayload();
+  const dbOverview = dbOverviewResult.status === "fulfilled"
+    ? normalizeAdminDbOverview(dbOverviewResult.value)
+    : normalizeAdminDbOverview();
+
+  const failedSections = [];
+  if (dashboardResult.status === "rejected") failedSections.push(`analytics: ${dashboardResult.reason?.message || "Request failed"}`);
+  if (catalogResult.status === "rejected") failedSections.push(`catalog: ${catalogResult.reason?.message || "Request failed"}`);
+  if (dbOverviewResult.status === "rejected") failedSections.push(`database: ${dbOverviewResult.reason?.message || "Request failed"}`);
+  if (failedSections.length) {
+    setStatus(status, `Loaded partial owner dashboard. ${failedSections.join(" · ")}`, "error");
+  } else {
+    setStatus(
+      status,
+      `Owner dashboard updated. ${dashboard.totals.products} products, ${dashboard.totals.orders} orders, and ${dashboard.totals.users} users loaded.`,
+      "success"
+    );
+  }
 
   const statsNode = document.getElementById("adminStats");
   const tableNode = document.getElementById("adminProductTable");
@@ -3262,7 +3430,6 @@ async function renderAdminPage() {
   const createCategoryButton = document.getElementById("adminCreateCategoryButton");
   const newCategoryNameInput = document.getElementById("adminNewCategoryName");
   const form = document.getElementById("adminProductForm");
-  const status = document.getElementById("adminStatus");
   const hiddenId = document.getElementById("adminProductId");
   const imageInput = document.getElementById("adminImageInput");
   const imageFileInput = document.getElementById("adminImageFile");
@@ -3286,12 +3453,14 @@ async function renderAdminPage() {
     dbQueryInput?.focus();
   };
 
-  statsNode.innerHTML = Object.entries(dashboard.totals).map(([label, value]) => `
-    <article class="stat-card">
-      <strong>${value}</strong>
-      <span>${label.replaceAll("_", " ")}</span>
-    </article>
-  `).join("");
+  if (statsNode) {
+    statsNode.innerHTML = Object.entries(dashboard.totals).map(([label, value]) => `
+      <article class="stat-card">
+        <strong>${value}</strong>
+        <span>${label.replaceAll("_", " ")}</span>
+      </article>
+    `).join("");
+  }
 
   if (ownerNode) {
     ownerNode.innerHTML = `
@@ -3323,12 +3492,14 @@ async function renderAdminPage() {
   }
 
   if (growthTimelineNode) {
-    growthTimelineNode.innerHTML = renderAnalyticsBars(
-      dashboard.order_activity,
-      (entry) => entry.label,
-      (entry) => entry.orders,
-      (entry) => `${entry.orders} orders · ${formatPrice(entry.revenue)}`
-    );
+    growthTimelineNode.innerHTML = dashboard.order_activity.length
+      ? renderAnalyticsBars(
+          dashboard.order_activity,
+          (entry) => entry.label,
+          (entry) => entry.orders,
+          (entry) => `${entry.orders} orders · ${formatPrice(entry.revenue)}`
+        )
+      : "<p class=\"empty-copy\">Order growth data is not available yet.</p>";
   }
 
   if (hourlyTimelineNode) {
@@ -3354,12 +3525,14 @@ async function renderAdminPage() {
   }
   if (categoryChartNode) {
     const activeCategoryPerformance = dashboard.category_performance.filter((entry) => entry.products > 0);
-    categoryChartNode.innerHTML = renderAnalyticsBars(
-      activeCategoryPerformance.slice(0, 8),
-      (entry) => entry.category_name,
-      (entry) => entry.ordered_units,
-      (entry) => `${entry.ordered_units} units · ${entry.cancelled_units} cancelled`
-    );
+    categoryChartNode.innerHTML = activeCategoryPerformance.length
+      ? renderAnalyticsBars(
+          activeCategoryPerformance.slice(0, 8),
+          (entry) => entry.category_name,
+          (entry) => entry.ordered_units,
+          (entry) => `${entry.ordered_units} units · ${entry.cancelled_units} cancelled`
+        )
+      : "<p class=\"empty-copy\">No category performance data yet.</p>";
   }
   if (categoryPerformanceNode) {
     const listedCategories = dashboard.category_performance.filter((entry) => entry.products > 0);
@@ -3463,14 +3636,20 @@ async function renderAdminPage() {
   }
 
   if (dbTableSelect) {
-    dbTableSelect.innerHTML = dbOverview.tables.map((table) => `
-      <option value="${table.name}">${table.name} (${table.rows} rows)</option>
-    `).join("");
+    dbTableSelect.innerHTML = dbOverview.tables.length
+      ? dbOverview.tables.map((table) => `
+          <option value="${table.name}">${table.name} (${table.rows} rows)</option>
+        `).join("")
+      : `<option value="">No tables available</option>`;
   }
 
-  categorySelect.innerHTML = catalog.categories.map((category) => `
-    <option value="${category.id}">${category.name}</option>
-  `).join("");
+  if (categorySelect) {
+    categorySelect.innerHTML = catalog.categories.length
+      ? catalog.categories.map((category) => `
+          <option value="${category.id}">${category.name}</option>
+        `).join("")
+      : `<option value="">No categories available</option>`;
+  }
   if (discountCategorySelect) {
     const discountCategories = dashboard.category_performance
       .filter((entry) => entry.products > 0)
@@ -3629,26 +3808,30 @@ async function renderAdminPage() {
   }
 
   const visibleProducts = isSectionExpanded("products") ? catalog.products : catalog.products.slice(0, sectionLimit);
-  tableNode.innerHTML = visibleProducts.map((product) => `
-    <article class="admin-row">
-      <div>
-        <strong>${product.name}</strong>
-        <p>Product ID ${product.id} · ${product.category.name}${product.secondary_categories?.length ? ` · ${product.secondary_categories.join(", ")}` : ""} · ${product.tag}${product.seller_shop_name ? ` · Seller ${product.seller_shop_name}` : ""}</p>
-        <p>${buildStockStatusMarkup(product)}${hasVisibleDiscount(product) ? ` · ${formatPrice(product.price)} from ${formatPrice(product.original_price)}` : ` · ${formatPrice(product.price)}`}</p>
-        <p class="admin-rating-row">${renderStars(product.rating)}<strong class="rating-value">${product.rating.toFixed(1)}</strong><span>${product.reviews_count} customer ratings</span></p>
-      </div>
-      <div class="admin-actions">
-        <div class="stock-control-group">
-          <span class="stock-badge">Stock ${product.stock}</span>
-          <button class="ghost-button owner-stock-adjust" data-product-id="${product.id}" data-stock="${product.stock}" data-stock-change="-1" type="button">-1</button>
-          <button class="ghost-button owner-stock-adjust" data-product-id="${product.id}" data-stock="${product.stock}" data-stock-change="1" type="button">+1</button>
-        </div>
-        <button class="ghost-button admin-edit" data-product-id="${product.id}" type="button">Edit</button>
-        <button class="ghost-button admin-delete-product" data-product-id="${product.id}" type="button">Delete</button>
-        <button class="ghost-button owner-edit-product" data-product-id="${product.id}" type="button">Control</button>
-      </div>
-    </article>
-  `).join("");
+  if (tableNode) {
+    tableNode.innerHTML = catalog.products.length
+      ? visibleProducts.map((product) => `
+          <article class="admin-row">
+            <div>
+              <strong>${product.name}</strong>
+              <p>Product ID ${product.id} · ${product.category.name}${product.secondary_categories?.length ? ` · ${product.secondary_categories.join(", ")}` : ""} · ${product.tag}${product.seller_shop_name ? ` · Seller ${product.seller_shop_name}` : ""}</p>
+              <p>${buildStockStatusMarkup(product)}${hasVisibleDiscount(product) ? ` · ${formatPrice(product.price)} from ${formatPrice(product.original_price)}` : ` · ${formatPrice(product.price)}`}</p>
+              <p class="admin-rating-row">${renderStars(product.rating)}<strong class="rating-value">${product.rating.toFixed(1)}</strong><span>${product.reviews_count} customer ratings</span></p>
+            </div>
+            <div class="admin-actions">
+              <div class="stock-control-group">
+                <span class="stock-badge">Stock ${product.stock}</span>
+                <button class="ghost-button owner-stock-adjust" data-product-id="${product.id}" data-stock="${product.stock}" data-stock-change="-1" type="button">-1</button>
+                <button class="ghost-button owner-stock-adjust" data-product-id="${product.id}" data-stock="${product.stock}" data-stock-change="1" type="button">+1</button>
+              </div>
+              <button class="ghost-button admin-edit" data-product-id="${product.id}" type="button">Edit</button>
+              <button class="ghost-button admin-delete-product" data-product-id="${product.id}" type="button">Delete</button>
+              <button class="ghost-button owner-edit-product" data-product-id="${product.id}" type="button">Control</button>
+            </div>
+          </article>
+        `).join("")
+      : "<p class=\"empty-copy\">Catalog products are not available yet.</p>";
+  }
   if (productsToggleButton) {
     productsToggleButton.hidden = catalog.products.length <= 5;
     productsToggleButton.textContent = isSectionExpanded("products") ? "Show Less" : `Show More (${catalog.products.length - 5})`;
@@ -3889,20 +4072,22 @@ async function renderAdminPage() {
 
   if (dbTablesNode) {
     const visibleTables = isSectionExpanded("tables") ? dbOverview.tables : dbOverview.tables.slice(0, sectionLimit);
-    dbTablesNode.innerHTML = visibleTables.map((table) => `
-      <article class="admin-row">
-        <div>
-          <strong>${table.name}</strong>
-          <p>${table.rows} rows available in this table</p>
-        </div>
-        <div class="admin-actions">
-          ${buildAdminRowActions([
-            { type: "preview-table", value: table.name, label: "Preview" },
-            { type: "edit-table", value: table.name, label: "Edit Data" }
-          ])}
-        </div>
-      </article>
-    `).join("");
+    dbTablesNode.innerHTML = dbOverview.tables.length
+      ? visibleTables.map((table) => `
+          <article class="admin-row">
+            <div>
+              <strong>${table.name}</strong>
+              <p>${table.rows} rows available in this table</p>
+            </div>
+            <div class="admin-actions">
+              ${buildAdminRowActions([
+                { type: "preview-table", value: table.name, label: "Preview" },
+                { type: "edit-table", value: table.name, label: "Edit Data" }
+              ])}
+            </div>
+          </article>
+        `).join("")
+      : "<p class=\"empty-copy\">Database table metadata is not available yet.</p>";
     if (dbTablesToggleButton) {
       dbTablesToggleButton.hidden = dbOverview.tables.length <= sectionLimit;
       dbTablesToggleButton.textContent = isSectionExpanded("tables") ? "Show Less" : `Show More (${dbOverview.tables.length - sectionLimit})`;
@@ -3916,7 +4101,8 @@ async function renderAdminPage() {
   async function loadOwnerDatabaseTable() {
     const tableName = dbTableSelect?.value;
     if (!tableName) {
-      setStatus(dbTableInfo, "No table selected.", "error");
+      setStatus(dbTableInfo, "No table selected.", dbOverview.tables.length ? "error" : "neutral");
+      renderDatabaseTable(dbPreview, [], []);
       return;
     }
     try {
@@ -4199,6 +4385,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (page === "wishlist") await renderWishlistPage();
     if (page === "admin") await renderAdminPage();
   } catch (error) {
-    setStatus(document.getElementById("pageStatus"), error.message, "error");
+    const statusNode = getPageStatusNode(page);
+    setStatus(statusNode, error.message, "error");
   }
 });

@@ -1194,6 +1194,8 @@ def admin_dashboard():
                     category_performance_map[product.category_id]["low_stock_products"] += 1
         for order in all_orders:
             for item in order.items:
+                if not item.product:
+                    continue
                 category_id = item.product.category_id
                 if category_id not in category_performance_map:
                     continue
@@ -1311,8 +1313,8 @@ def admin_dashboard():
                     {
                         "id": review.id,
                         "product_id": review.product_id,
-                        "product_name": review.product.name,
-                        "product_slug": review.product.slug,
+                        "product_name": review.product.name if review.product else f"Removed Product #{review.product_id}",
+                        "product_slug": review.product.slug if review.product else "",
                         "author_name": review.author_name,
                         "rating": review.rating,
                         "title": review.title,
