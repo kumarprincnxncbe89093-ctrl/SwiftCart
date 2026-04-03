@@ -12,7 +12,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from backend.models import init_db
 from backend.routes.orders import orders_bp
 from backend.routes.products import products_bp
-from backend.routes.users import users_bp
+from backend.routes.users import complete_login_form_submission, users_bp
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -256,8 +256,10 @@ def create_app() -> Flask:
     def root():
         return serve_frontend_page("index.html")
 
-    @app.get("/login")
+    @app.route("/login", methods=["GET", "POST"])
     def login_page():
+        if request.method == "POST":
+            return complete_login_form_submission()
         return serve_frontend_page("Login.html")
 
     @app.get("/register")

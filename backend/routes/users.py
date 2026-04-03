@@ -1,11 +1,14 @@
+import base64
+import json
 import os
 import random
 import secrets
 from datetime import datetime, timedelta
 import ipaddress
 from pathlib import Path
+from urllib.parse import urlencode
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, redirect, request
 from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
@@ -279,6 +282,15 @@ def _normalize_mobile(value: str) -> str:
 
 def _normalize_login_identifier(value: str) -> str:
     return str(value or "").strip()
+
+
+def _request_payload() -> dict:
+    json_payload = request.get_json(silent=True)
+    if isinstance(json_payload, dict) and json_payload:
+        return json_payload
+    if request.form:
+        return request.form.to_dict(flat=True)
+    return {}
 
 
 def _is_disabled_demo_account_email(value: str) -> bool:
@@ -738,7 +750,7 @@ def register():
 
 @users_bp.post("/auth/login")
 def login():
-    payload = request.get_json(silent=True) or {}
+    payload = _request_payload()
     identifier = _normalize_login_identifier(payload.get("email", ""))
     password = payload.get("password", "")
     captcha_id = payload.get("captcha_id", "")
@@ -775,6 +787,65 @@ def login():
                 **_auth_response(user),
             }
         )
+
+
+def _redirect_path_for_user(payload: dict) -> str:
+    user = payload.get("user", {}) or {}
+    if user.get("is_owner"):
+        return "/owner-workspace"
+    if str(user.get("account_type", "")).strip().lower() in {"merchant", "seller"}:
+        return "/Merchant.html"
+    return "/Account_Details.html"
+
+
+def _encode_user_payload(user_payload: dict) -> str:
+    serialized = json.dumps(user_payload, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    return base64.urlsafe_b64encode(serialized).decode("ascii").rstrip("=")
+
+
+def complete_login_form_submission():
+    payload = request.form.to_dict(flat=True)
+    identifier = _normalize_login_identifier(payload.get("email", ""))
+    password = payload.get("password", "")
+    captcha_id = payload.get("captcha_id", "")
+    captcha_answer = payload.get("captcha_answer", "")
+
+    is_valid_captcha, captcha_message = _verify_captcha(captcha_id, captcha_answer)
+    if not is_valid_captcha:
+        return redirect(f"/login?{urlencode({'error': captcha_message})}", code=303)
+
+    with session_scope() as session:
+        user = _find_user_by_login_identifier(session, identifier)
+        if not user:
+            repaired_owner = _repair_or_bootstrap_owner_account(session, identifier, password)
+            if repaired_owner:
+                user = repaired_owner
+            else:
+                return redirect(f"/login?{urlencode({'error': 'Invalid email or user code.'})}", code=303)
+
+        password_ok = verify_password(user.password_hash, password)
+        if not password_ok:
+            password_ok = _sync_owner_credentials_if_needed(session, user, password)
+        if not password_ok:
+            return redirect(f"/login?{urlencode({'error': 'Invalid password.'})}", code=303)
+
+        _upgrade_password_hash_if_needed(user, password)
+        banned_error = _ensure_user_is_active(user)
+        if banned_error:
+            response, _status_code = banned_error
+            message = (response.get_json(silent=True) or {}).get("message") or "Your account is not active."
+            return redirect(f"/login?{urlencode({'error': message})}", code=303)
+
+        _stamp_login_context(user, method="password_login")
+        auth_payload = _auth_response(user)
+        query = urlencode(
+            {
+                "token": auth_payload["token"],
+                "user": _encode_user_payload(auth_payload["user"]),
+                "redirect": _redirect_path_for_user(auth_payload),
+            }
+        )
+        return redirect(f"/auth-complete?{query}", code=303)
 
 
 @users_bp.post("/users/<int:user_id>/change-password")

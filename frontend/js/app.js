@@ -2543,11 +2543,17 @@ async function handleLogin() {
   const recoveryPanel = document.getElementById("recoveryPanel");
   const captchaPrompt = document.getElementById("captchaPrompt");
   const captchaAnswer = document.getElementById("captchaAnswer");
+  const captchaIdInput = document.getElementById("captchaIdInput");
   const captchaCheckbox = document.getElementById("captchaCheckbox");
   const refreshCaptchaButton = document.getElementById("refreshCaptchaButton");
   let captchaSessionId = "";
   const authFlashMessage = consumeAuthFlashMessage();
-  if (authFlashMessage) {
+  const loginPageParams = new URLSearchParams(window.location.search);
+  const loginPageError = loginPageParams.get("error") || "";
+  if (loginPageError) {
+    setStatus(loginStatusNode, loginPageError, "error");
+    window.history.replaceState({}, "", window.location.pathname);
+  } else if (authFlashMessage) {
     setStatus(loginStatusNode, authFlashMessage, "error");
   }
 
@@ -2571,13 +2577,16 @@ async function handleLogin() {
     try {
       const response = await apiFetch("/auth/captcha");
       captchaSessionId = response.captcha_id;
+      if (captchaIdInput) captchaIdInput.value = response.captcha_id;
       if (captchaPrompt) captchaPrompt.textContent = response.prompt;
       if (captchaAnswer) captchaAnswer.value = "";
       if (captchaCheckbox) captchaCheckbox.checked = false;
-      if (!authFlashMessage) {
+      if (!authFlashMessage && !loginPageError) {
         setStatus(loginStatusNode, "", "neutral");
       }
     } catch (error) {
+      captchaSessionId = "";
+      if (captchaIdInput) captchaIdInput.value = "";
       if (captchaPrompt) captchaPrompt.textContent = "Verification unavailable. Refresh and try again.";
       setStatus(loginStatusNode, error.message, "error");
     }

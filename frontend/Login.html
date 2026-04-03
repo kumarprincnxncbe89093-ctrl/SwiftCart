@@ -64,7 +64,7 @@
                 <h3>Password Sign-In</h3>
                 <p>Use your registered email address or your SwiftCart user code with your password.</p>
             </div>
-            <form id="loginForm" class="auth-form" method="post" action="/api/auth/login" accept-charset="UTF-8" autocomplete="on">
+            <form id="loginForm" class="auth-form" method="post" action="/login" accept-charset="UTF-8" autocomplete="on">
                 <label class="auth-field">
                     <span>Email Address or User Code</span>
                     <input type="text" name="email" id="loginEmail" required autocomplete="username" placeholder="Enter your email or 10-digit user code">
@@ -84,9 +84,10 @@
                         <button id="refreshCaptchaButton" class="captcha-refresh-button" type="button">Refresh</button>
                     </div>
                     <p id="captchaPrompt" class="captcha-prompt">Loading verification…</p>
+                    <input type="hidden" name="captcha_id" id="captchaIdInput">
                     <label class="auth-field">
                         <span>Enter the answer</span>
-                        <input type="text" id="captchaAnswer" inputmode="numeric" autocomplete="off" placeholder="Solve the verification">
+                        <input type="text" name="captcha_answer" id="captchaAnswer" inputmode="numeric" autocomplete="off" placeholder="Solve the verification">
                     </label>
                     <label class="captcha-check">
                         <input type="checkbox" id="captchaCheckbox">
