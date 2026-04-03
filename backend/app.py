@@ -18,7 +18,7 @@ from backend.routes.users import complete_login_form_submission, users_bp
 BASE_DIR = Path(__file__).resolve().parent.parent
 FRONTEND_DIR = BASE_DIR / "frontend"
 UPLOADS_DIR = FRONTEND_DIR / "uploads" / "profiles"
-DEFAULT_PUBLIC_SITE_URL = "https://www.swift-store.in"
+DEFAULT_PUBLIC_SITE_URL = ""
 ALLOWED_ORIGINS = {
     origin.strip()
     for origin in os.getenv("ALLOWED_ORIGINS", "").split(",")
@@ -74,6 +74,14 @@ def create_app() -> Flask:
                 "1" if app.config["ENV_NAME"].strip().lower() == "production" else "0",
             )
         ).strip().lower() in {"1", "true", "yes", "on"}
+
+    def should_redirect_to_canonical_host() -> bool:
+        return str(os.getenv("ENABLE_CANONICAL_REDIRECT", "0")).strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
 
     def normalized_host(hostname: str) -> str:
         host = (hostname or "").strip().lower().rstrip(".")
@@ -148,6 +156,8 @@ def create_app() -> Flask:
     @app.before_request
     def redirect_to_canonical_host():
         if request.path in {"/healthz", "/api/health"}:
+            return None
+        if not should_redirect_to_canonical_host():
             return None
         target_origin = canonical_origin()
         target_host = canonical_host()
