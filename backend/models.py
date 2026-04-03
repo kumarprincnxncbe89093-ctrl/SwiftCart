@@ -46,6 +46,21 @@ def _default_seed_value(value: str) -> str:
     return "" if IS_PRODUCTION else value
 
 
+def _sanitize_benchmark_note(value: str) -> str:
+    note = str(value or "").strip()
+    if not note:
+        return "Current India market pricing reference, Mar 2026"
+    replacements = {
+        "Amazon India": "leading India marketplace",
+        "Amazon": "leading marketplace",
+        "Flipkart": "leading marketplace",
+        "Smartprix and Amazon India": "India market data sources",
+    }
+    for old_value, new_value in replacements.items():
+        note = note.replace(old_value, new_value)
+    return note
+
+
 def _normalize_database_url(raw_url: str | None) -> str:
     url = str(raw_url or "").strip().strip("'\"")
     if "\n" in url:
@@ -1093,13 +1108,14 @@ def sync_imported_gallery_products() -> None:
                 "benchmark",
                 "Comparable India marketplace pricing, Mar 2026",
             )
+            benchmark_note = _sanitize_benchmark_note(benchmark_note)
             description = (
-                f"{product_name} listed using current India market benchmark pricing. "
-                f"Benchmark source: {benchmark_note}. Estimated sourcing cost: INR {cost_price}."
+                f"{product_name} listed using current India market pricing references. "
+                f"Pricing reference: {benchmark_note}. Estimated sourcing cost: INR {cost_price}."
             )
             highlights = (
-                "Market-aligned pricing|Marketplace-ready listing|Available for wishlist and reviews|"
-                "Benchmark refreshed from current India pricing"
+                "Market-aligned pricing|SwiftCart catalog listing|Available for wishlist and reviews|"
+                "Pricing reference refreshed from current India market data"
             )
             specifications = (
                 _build_imported_specifications(
@@ -1861,12 +1877,12 @@ def _build_imported_specifications(
         "Style Code": f"RP-{index:02d}",
         "Product Name": product_name,
         "Segment": tag,
-        "Pricing Basis": "Real-life market benchmark",
+        "Pricing Basis": "Current India market reference",
         "Selling Price": f"INR {selling_price}",
         "MRP": f"INR {original_price}",
         "Estimated Cost": f"INR {cost_price}",
         "Benchmark Source": benchmark_note,
-        "Listing Type": "Imported Gallery Product",
+        "Listing Type": "SwiftCart Catalog Product",
     }
 
     if "iphone" in lower_name:

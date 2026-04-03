@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 from flask import Flask, jsonify, redirect, request, send_from_directory
 from sqlalchemy.exc import DBAPIError, OperationalError
@@ -77,6 +78,24 @@ def create_app() -> Flask:
         host = hostname.split(":", 1)[0].strip().lower()
         return host in {"127.0.0.1", "localhost"} or host.endswith(".local")
 
+    def canonical_origin() -> str:
+        configured = (
+            os.getenv("PUBLIC_SITE_URL")
+            or os.getenv("CANONICAL_BASE_URL")
+            or ""
+        ).strip().rstrip("/")
+        if not configured:
+            return ""
+        if "://" not in configured:
+            configured = f"https://{configured}"
+        return configured
+
+    def canonical_host() -> str:
+        origin = canonical_origin()
+        if not origin:
+            return ""
+        return urlsplit(origin).netloc.strip().lower()
+
     def database_unavailable_response():
         message = "SwiftCart cannot reach the database right now. Please try again shortly."
         if not app.config.get("DB_INIT_ERROR"):
@@ -103,6 +122,28 @@ def create_app() -> Flask:
         secure_url = request.url.replace("http://", "https://", 1)
         redirect_code = 301 if request.method in {"GET", "HEAD", "OPTIONS"} else 307
         return redirect(secure_url, code=redirect_code)
+
+    @app.before_request
+    def redirect_to_canonical_host():
+        if request.path in {"/healthz", "/api/health"}:
+            return None
+        target_origin = canonical_origin()
+        target_host = canonical_host()
+        current_host = request.host.strip().lower()
+        if not target_origin or not target_host or is_local_host(current_host) or current_host == target_host:
+            return None
+        target_parts = urlsplit(target_origin)
+        redirect_url = urlunsplit(
+            (
+                target_parts.scheme or "https",
+                target_parts.netloc,
+                request.path,
+                request.query_string.decode("utf-8", "ignore"),
+                "",
+            )
+        )
+        redirect_code = 301 if request.method in {"GET", "HEAD", "OPTIONS"} else 307
+        return redirect(redirect_url, code=redirect_code)
 
     @app.before_request
     def gate_api_when_database_is_unavailable():
@@ -137,6 +178,12 @@ def create_app() -> Flask:
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         if request.host.endswith(".up.railway.app"):
             response.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive"
+        canonical = canonical_origin()
+        if canonical and not request.path.startswith("/api") and response.mimetype == "text/html":
+            target_parts = urlsplit(canonical)
+            response.headers["Link"] = (
+                f"<{urlunsplit((target_parts.scheme or 'https', target_parts.netloc, request.path, request.query_string.decode('utf-8', 'ignore'), ''))}>; rel=\"canonical\""
+            )
         if (
             request.path.startswith("/api")
             or response.mimetype in {"text/html", "text/css", "application/javascript", "text/javascript"}

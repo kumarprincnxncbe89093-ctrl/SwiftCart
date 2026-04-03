@@ -133,9 +133,9 @@ function isRailwayPreviewHost() {
 function normalizeHomePayload(payload = {}) {
   return {
     hero: {
-      title: payload?.hero?.title || "SwiftCart Marketplace",
-      subtitle: payload?.hero?.subtitle || "Discover fashion, footwear, and accessories with richer product data and real checkout flows.",
-      highlight: payload?.hero?.highlight || "Daily deals and premium selections updated from the catalog.",
+      title: payload?.hero?.title || "SwiftCart Storefront",
+      subtitle: payload?.hero?.subtitle || "Discover fashion, footwear, and accessories through a distinct SwiftCart catalog with secure account access.",
+      highlight: payload?.hero?.highlight || "Fresh catalog picks, public trust pages, and support information are available throughout the site.",
     },
     categories: Array.isArray(payload?.categories) ? payload.categories : [],
     featured_products: Array.isArray(payload?.featured_products) ? payload.featured_products : [],
@@ -292,9 +292,9 @@ function buildFallbackHomePayload(categories = [], products = []) {
     imported_products: catalog.filter((item) => item?.category?.slug === "research-picks").slice(0, 12),
     new_arrivals: newest.slice(0, 10),
     hero: {
-      title: "SwiftCart Marketplace",
-      subtitle: "Discover fashion, footwear, and accessories with richer product data, offers, and real checkout flows.",
-      highlight: "Daily deals and premium selections inspired by modern marketplace experiences.",
+      title: "SwiftCart Storefront",
+      subtitle: "Discover fashion, footwear, and accessories with richer product data, offers, and clear SwiftCart branding.",
+      highlight: "Fresh catalog selections with distinct SwiftCart identity and public support pages.",
     },
   });
 }
@@ -321,7 +321,7 @@ function guardProtectedPage(page) {
       saveStoredUser(null);
     }
     document.body.style.display = "none";
-    redirectToPage("Login.html");
+    redirectToPage("/login");
     return false;
   };
 
@@ -351,7 +351,7 @@ function requireAuthenticatedPageUser(message = "Your session has expired. Pleas
     setAuthFlashMessage(message);
     saveStoredUser(null);
   }
-  redirectToPage("Login.html");
+  redirectToPage("/login");
   return null;
 }
 
@@ -630,7 +630,7 @@ function syncUserUi() {
     const meta = node.querySelector(".nav-second");
     if (greeting) greeting.textContent = user ? user.first_name : "Sign in";
     if (meta) meta.textContent = user ? "My Account" : "Login";
-    if (link) link.href = user ? "Account_Details.html" : "Login.html";
+    if (link) link.href = user ? "Account_Details.html" : "/login";
   });
 
   document.querySelectorAll(".navbar").forEach((navbar) => {
@@ -653,7 +653,7 @@ function syncUserUi() {
     }
     if (!user && allowSignupCta && !existingSignup) {
       const signupLink = document.createElement("a");
-      signupLink.href = "Account_Creation.html";
+      signupLink.href = "/register";
       signupLink.className = "nav-signup-button";
       signupLink.textContent = "Create Account";
       navbar.appendChild(signupLink);
@@ -666,7 +666,7 @@ function syncUserUi() {
     const link = node.closest("a.icon");
     node.innerHTML = buildUserAvatarMarkup(user);
     node.classList.toggle("is-logged-in", Boolean(user));
-    if (link) link.href = user ? "Account_Details.html" : "Login.html";
+    if (link) link.href = user ? "Account_Details.html" : "/login";
   });
 }
 
@@ -845,12 +845,12 @@ function decorateSharedFooters() {
           <h4>SELL ON SWIFTCART</h4>
           <p>Merchant onboarding</p>
           <p>Product listing controls</p>
-          <p>Marketplace visibility</p>
+          <p>Catalog visibility</p>
         </div>
         <div class="footer-col">
           <h4>DISCOVER</h4>
           <a href="/about">Fashion and accessories</a>
-          <a href="/about">Curated marketplace collection</a>
+          <a href="/about">Curated SwiftCart collection</a>
           <a href="/privacy">Deals, trends, and fresh arrivals</a>
         </div>
         <div class="footer-col border-left">
@@ -867,7 +867,7 @@ function decorateSharedFooters() {
         </div>
       </div>
       <div class="footer-bottom footer-bottom-rich">
-        <div><i class="fa-solid fa-store"></i><span>Marketplace Ready</span></div>
+        <div><i class="fa-solid fa-store"></i><span>Official Storefront</span></div>
         <div><i class="fa-solid fa-shield-heart"></i><span>Secure Access</span></div>
         <div><i class="fa-solid fa-truck-fast"></i><span>Tracked Delivery</span></div>
         <div><i class="fa-solid fa-headset"></i><a href="/contact">Support Center</a></div>
@@ -1482,7 +1482,7 @@ async function renderHomePage() {
         copy: `${discountedShowcaseCount} products are currently showing deal pricing instead of flat static catalog prices.`,
       },
       {
-        title: "Marketplace Depth",
+        title: "Catalog Depth",
         copy: topCategories.length
           ? `Top active departments include ${topCategories.map((item) => item.name).join(", ")}.`
           : "The catalog is ready to scale across multiple departments.",
@@ -1526,7 +1526,7 @@ async function renderHomePage() {
     suggestionIndex.push({
       type: "Product",
       title: product.name,
-      subtitle: `${product.category?.name || product.tag || "Marketplace listing"} · ${formatPrice(product.price)}`,
+      subtitle: `${product.category?.name || product.tag || "SwiftCart listing"} · ${formatPrice(product.price)}`,
       value: product.name,
     });
   });
@@ -3393,7 +3393,7 @@ async function renderMerchantPage() {
   const user = requireAuthenticatedPageUser("Your merchant session is missing or expired. Please login again.");
   if (!user) return;
   if (!isMerchantUser(user)) {
-    redirectToPage("Login.html");
+    redirectToPage("/login");
     return;
   }
 
@@ -3549,13 +3549,13 @@ function bindOwnerActionButtons(scope, handlers) {
 async function renderAdminPage() {
   const user = getStoredUser();
   if (!isOwnerUser(user)) {
-    redirectToPage("Login.html");
+    redirectToPage("/login");
     return;
   }
   if (!String(getAuthToken() || "").trim()) {
     setAuthFlashMessage("Your owner session is missing or expired. Please login again.");
     saveStoredUser(null);
-    redirectToPage("Login.html");
+    redirectToPage("/login");
     return;
   }
 

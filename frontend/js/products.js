@@ -66,6 +66,10 @@ function getAuthToken() {
   return String(localStorage.getItem(STORAGE_KEYS.token) || getStoredUser()?.auth_token || "").trim();
 }
 
+function getLoginPagePath() {
+  return "/login";
+}
+
 function getCart() {
   try {
     const raw = JSON.parse(localStorage.getItem(STORAGE_KEYS.cart) || "[]");
@@ -107,7 +111,7 @@ function logoutCurrentUser() {
   document.querySelector(".chatbot-shell")?.remove();
   saveStoredUser(null);
   sessionStorage.setItem("swiftcart-last-logout", String(Date.now()));
-  redirectToPage("Login.html");
+  redirectToPage(getLoginPagePath());
 }
 
 function setAuthFlashMessage(message) {
@@ -162,15 +166,15 @@ async function apiFetch(path, options = {}) {
     if (response.status === 401 && (authToken || storedUser?.id)) {
       setAuthFlashMessage(data?.message || "Your session has expired. Please login again.");
       saveStoredUser(null);
-      if (!window.location.pathname.toLowerCase().endsWith("login.html")) {
-        redirectToPage("Login.html");
+      if (!window.location.pathname.toLowerCase().endsWith("/login") && !window.location.pathname.toLowerCase().endsWith("login.html")) {
+        redirectToPage(getLoginPagePath());
       }
     }
     if (data?.force_logout) {
       setAuthFlashMessage(data?.message || "Your session is no longer active.");
       saveStoredUser(null);
-      if (!window.location.pathname.toLowerCase().endsWith("login.html")) {
-        redirectToPage("Login.html");
+      if (!window.location.pathname.toLowerCase().endsWith("/login") && !window.location.pathname.toLowerCase().endsWith("login.html")) {
+        redirectToPage(getLoginPagePath());
       }
     }
     throw new Error(data?.message || "Request failed");

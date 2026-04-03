@@ -91,7 +91,7 @@ header{
 }
 
 .nav-logo::after{
-    content:"Marketplace";
+    content:"Official";
     position:absolute;
     right:10px;
     top:50%;
