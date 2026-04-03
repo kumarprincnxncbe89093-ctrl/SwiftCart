@@ -129,6 +129,7 @@ function removeCartItem(productId) {
 async function apiFetch(path, options = {}) {
   const isFormData = options.body instanceof FormData;
   const authToken = getAuthToken();
+  const storedUser = getStoredUser();
   const response = await fetch(`${API_BASE}${path}`, {
     headers: {
       ...(isFormData ? {} : { "Content-Type": "application/json" }),
@@ -147,7 +148,7 @@ async function apiFetch(path, options = {}) {
   }
 
   if (!response.ok) {
-    if (response.status === 401 && authToken) {
+    if (response.status === 401 && (authToken || storedUser?.id)) {
       setAuthFlashMessage(data?.message || "Your session has expired. Please login again.");
       saveStoredUser(null);
       if (!window.location.pathname.toLowerCase().endsWith("login.html")) {

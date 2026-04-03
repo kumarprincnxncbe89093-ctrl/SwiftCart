@@ -24,6 +24,8 @@ from backend.models import (
     UserChangeLog,
     WishlistItem,
     engine,
+    ensure_owner_account,
+    seed_data,
     serialize_order,
     serialize_product,
     serialize_user,
@@ -147,6 +149,24 @@ def _require_merchant(session):
     if error:
         return None, error
     return user, None
+
+
+def _ensure_catalog_seed_data_if_empty(session) -> None:
+    has_categories = session.query(Category.id).first() is not None
+    has_products = session.query(Product.id).first() is not None
+    if has_categories and has_products:
+        return
+    seed_data()
+    ensure_owner_account()
+    session.expire_all()
+
+
+def _category_exists(session, category_id) -> bool:
+    try:
+        normalized_category_id = int(category_id)
+    except (TypeError, ValueError):
+        return False
+    return session.query(Category.id).filter(Category.id == normalized_category_id).first() is not None
 
 
 def _database_table_names(connection):
@@ -314,8 +334,26 @@ def _backup_sqlite_database(connection) -> dict:
 
 def _run_database_maintenance(action: str) -> dict:
     normalized_action = str(action or "").strip().lower()
-    if normalized_action not in {"backup", "integrity_check", "vacuum", "wal_checkpoint"}:
+    if normalized_action not in {"backup", "integrity_check", "vacuum", "wal_checkpoint", "restore_seed_data"}:
         raise ValueError("Unsupported maintenance action.")
+
+    if normalized_action == "restore_seed_data":
+        seed_data()
+        ensure_owner_account()
+        with session_scope() as session:
+            snapshot = {
+                "categories": session.query(Category).count(),
+                "products": session.query(Product).count(),
+                "users": session.query(User).count(),
+                "orders": session.query(Order).count(),
+                "reviews": session.query(Review).count(),
+            }
+        return {
+            "action": normalized_action,
+            "message": "Base SwiftCart categories, products, and owner account have been restored.",
+            "columns": ["categories", "products", "users", "orders", "reviews"],
+            "rows": [snapshot],
+        }
 
     if normalized_action == "backup":
         with engine.connect() as connection:
@@ -485,6 +523,7 @@ def _serialize_chat_products(products: list[Product]) -> list[dict]:
 @products_bp.get("/categories")
 def list_categories():
     with session_scope() as session:
+        _ensure_catalog_seed_data_if_empty(session)
         _expire_category_discounts(session)
         categories = session.query(Category).order_by(Category.name.asc()).all()
         return jsonify(
@@ -513,6 +552,7 @@ def list_products():
     sort = request.args.get("sort", "featured")
 
     with session_scope() as session:
+        _ensure_catalog_seed_data_if_empty(session)
         _expire_category_discounts(session)
         query = session.query(Product).options(joinedload(Product.category), joinedload(Product.seller))
         if query_text or category_slug:
@@ -570,6 +610,7 @@ def list_products():
 @products_bp.get("/products/<slug>")
 def product_detail(slug: str):
     with session_scope() as session:
+        _ensure_catalog_seed_data_if_empty(session)
         _expire_category_discounts(session)
         product = (
             session.query(Product)
@@ -624,6 +665,7 @@ def product_detail(slug: str):
 @products_bp.get("/home")
 def home_payload():
     with session_scope() as session:
+        _ensure_catalog_seed_data_if_empty(session)
         _expire_category_discounts(session)
         categories = session.query(Category).order_by(Category.name.asc()).all()
         featured = (
@@ -1106,6 +1148,7 @@ def chatbot_message():
 @products_bp.get("/merchant/dashboard")
 def merchant_dashboard():
     with session_scope() as session:
+        _ensure_catalog_seed_data_if_empty(session)
         _expire_category_discounts(session)
         merchant, error = _require_merchant(session)
         if error:
@@ -1133,6 +1176,7 @@ def merchant_dashboard():
 @products_bp.get("/merchant/products")
 def merchant_list_products():
     with session_scope() as session:
+        _ensure_catalog_seed_data_if_empty(session)
         merchant, error = _require_merchant(session)
         if error:
             return error
@@ -1172,6 +1216,8 @@ def merchant_create_product():
         merchant, error = _require_merchant(session)
         if error:
             return error
+        if not _category_exists(session, payload.get("category_id")):
+            return jsonify({"message": "Selected category was not found."}), 404
         normalized_slug = _normalized_slug(payload["slug"])
         existing = session.query(Product).filter(Product.slug == normalized_slug).first()
         if existing:
@@ -1244,6 +1290,8 @@ def merchant_update_product(product_id: int):
             product.slug = normalized_slug
 
         if "category_id" in payload:
+            if not _category_exists(session, payload["category_id"]):
+                return jsonify({"message": "Selected category was not found."}), 404
             product.category_id = int(payload["category_id"])
         if "price" in payload or "original_price" in payload:
             try:
@@ -1282,6 +1330,7 @@ def merchant_update_product(product_id: int):
 @products_bp.get("/admin/dashboard")
 def admin_dashboard():
     with session_scope() as session:
+        _ensure_catalog_seed_data_if_empty(session)
         owner, error = _require_owner(session)
         if error:
             return error
@@ -1747,6 +1796,7 @@ def admin_database_maintenance():
 @products_bp.get("/admin/products")
 def admin_list_products():
     with session_scope() as session:
+        _ensure_catalog_seed_data_if_empty(session)
         _expire_category_discounts(session)
         owner, error = _require_owner(session)
         if error:
@@ -1978,6 +2028,8 @@ def admin_create_product():
         owner, error = _require_owner(session)
         if error:
             return error
+        if not _category_exists(session, payload.get("category_id")):
+            return jsonify({"message": "Selected category was not found."}), 404
         normalized_slug = _normalized_slug(payload["slug"])
         existing = session.query(Product).filter(Product.slug == normalized_slug).first()
         if existing:
@@ -2049,6 +2101,8 @@ def admin_update_product(product_id: int):
                 setattr(product, field, value)
 
         if "category_id" in payload:
+            if not _category_exists(session, payload["category_id"]):
+                return jsonify({"message": "Selected category was not found."}), 404
             product.category_id = int(payload["category_id"])
         if "price" in payload or "original_price" in payload:
             try:

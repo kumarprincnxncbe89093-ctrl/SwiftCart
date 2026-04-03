@@ -227,6 +227,10 @@ function normalizeAdminDbOverview(payload = {}) {
   return {
     owner: payload?.owner || null,
     database_path: String(payload?.database_path || "Unavailable"),
+    health: payload?.health && typeof payload.health === "object" ? payload.health : {},
+    storage: payload?.storage && typeof payload.storage === "object" ? payload.storage : {},
+    backups: Array.isArray(payload?.backups) ? payload.backups : [],
+    backup_count: Number(payload?.backup_count || 0),
     tables: Array.isArray(payload?.tables) ? payload.tables : []
   };
 }
@@ -299,7 +303,12 @@ function guardProtectedPage(page) {
 
   const verify = () => {
     const user = getStoredUser();
-    if (canAccess(user)) return true;
+    const hasSession = hasStoredAuthSession(user);
+    if (canAccess(user) && hasSession) return true;
+    if (canAccess(user) && !hasSession) {
+      setAuthFlashMessage("Your session is missing or expired. Please login again.");
+      saveStoredUser(null);
+    }
     document.body.style.display = "none";
     redirectToPage("Login.html");
     return false;
@@ -316,6 +325,23 @@ function isOwnerUser(user) {
 
 function isMerchantUser(user) {
   return Boolean(user && ["merchant", "seller"].includes(user.account_type));
+}
+
+function hasStoredAuthSession(user = getStoredUser()) {
+  return Boolean(user?.id && String(user?.auth_token || "").trim());
+}
+
+function requireAuthenticatedPageUser(message = "Your session has expired. Please login again.") {
+  const user = getStoredUser();
+  if (hasStoredAuthSession(user)) {
+    return user;
+  }
+  if (user?.id) {
+    setAuthFlashMessage(message);
+    saveStoredUser(null);
+  }
+  redirectToPage("Login.html");
+  return null;
 }
 
 function buildOwnerQuery(user) {
@@ -1269,6 +1295,24 @@ function formatDateTime(value) {
   });
 }
 
+function formatBytes(value) {
+  const bytes = Math.max(0, Number(value) || 0);
+  if (!bytes) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  const unitIndex = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const scaled = bytes / (1024 ** unitIndex);
+  return `${scaled >= 10 || unitIndex === 0 ? scaled.toFixed(0) : scaled.toFixed(1)} ${units[unitIndex]}`;
+}
+
+function getSqlOperation(sql) {
+  const match = String(sql || "").trim().replace(/;+$/, "").match(/^([a-z]+)/i);
+  return match ? match[1].toUpperCase() : "";
+}
+
+function isWriteSqlOperation(sql) {
+  return ["INSERT", "UPDATE", "DELETE"].includes(getSqlOperation(sql));
+}
+
 function renderCategories(categories) {
   const container = document.getElementById("categoryRail");
   if (!container) return;
@@ -2040,7 +2084,8 @@ async function renderCartPage() {
 
 async function renderPaymentPage() {
   await loadProductsForCart();
-  const user = getStoredUser();
+  const user = requireAuthenticatedPageUser("Please login again before continuing to checkout.");
+  if (!user) return;
   let selectedAddressId = null;
   const items = getCart()
     .map((item) => {
@@ -2309,6 +2354,12 @@ async function handleRegistration() {
   ], "title");
   bindAutoCapitalization([form.elements.street], "sentence");
 
+  const resetRegistrationOtpState = () => {
+    state.registerOtpVerified = false;
+    if (otpSessionIdInput) otpSessionIdInput.value = "";
+    if (otpCodeInput) otpCodeInput.value = "";
+  };
+
   function syncAccountTypeUi() {
     const accountType = form.querySelector("input[name='account_type']:checked")?.value || "buyer";
     if (sellerFields) sellerFields.hidden = accountType !== "merchant" && accountType !== "seller";
@@ -2318,6 +2369,14 @@ async function handleRegistration() {
     input.addEventListener("change", syncAccountTypeUi);
   });
   syncAccountTypeUi();
+
+  [form.elements.email, form.elements.mobile].filter(Boolean).forEach((field) => {
+    field.addEventListener("input", () => {
+      resetRegistrationOtpState();
+      setStatus(otpStatus, "", "neutral");
+      setStatus(registerStatus, "", "neutral");
+    });
+  });
 
   function getOtpIdentity() {
     const formData = new FormData(form);
@@ -2446,6 +2505,22 @@ async function handleLogin() {
     setStatus(loginStatusNode, authFlashMessage, "error");
   }
 
+  const resetLoginOtpState = () => {
+    state.loginOtpSessionId = null;
+    state.loginOtpAccounts = [];
+    if (loginOtpInput) loginOtpInput.value = "";
+    if (loginLinkedAccountsBox) loginLinkedAccountsBox.hidden = true;
+    if (loginAccountSelect) loginAccountSelect.innerHTML = "";
+  };
+
+  const resetRecoveryOtpState = () => {
+    state.recoveryOtpSessionId = null;
+    state.recoveryOtpAccounts = [];
+    if (recoveryOtpInput) recoveryOtpInput.value = "";
+    if (recoveryLinkedAccountsBox) recoveryLinkedAccountsBox.hidden = true;
+    if (recoveryAccountSelect) recoveryAccountSelect.innerHTML = "";
+  };
+
   const loadCaptcha = async () => {
     try {
       const response = await apiFetch("/auth/captcha");
@@ -2484,10 +2559,28 @@ async function handleLogin() {
   };
 
   refreshCaptchaButton?.addEventListener("click", loadCaptcha);
-  loginEmail?.addEventListener("input", () => setStatus(loginStatusNode, "", "neutral"));
+  loginEmail?.addEventListener("input", () => {
+    setStatus(loginStatusNode, "", "neutral");
+    setStatus(loginOtpStatus, "", "neutral");
+    resetLoginOtpState();
+  });
+  loginMobile?.addEventListener("input", () => {
+    setStatus(loginOtpStatus, "", "neutral");
+    resetLoginOtpState();
+  });
   form.elements.password?.addEventListener("input", () => setStatus(loginStatusNode, "", "neutral"));
   captchaAnswer?.addEventListener("input", () => setStatus(loginStatusNode, "", "neutral"));
   captchaCheckbox?.addEventListener("change", () => setStatus(loginStatusNode, "", "neutral"));
+  recoveryEmail?.addEventListener("input", () => {
+    setStatus(recoveryStatus, "", "neutral");
+    resetRecoveryOtpState();
+  });
+  recoveryMobile?.addEventListener("input", () => {
+    setStatus(recoveryStatus, "", "neutral");
+    resetRecoveryOtpState();
+  });
+  recoveryNewPassword?.addEventListener("input", () => setStatus(recoveryStatus, "", "neutral"));
+  recoveryConfirmPassword?.addEventListener("input", () => setStatus(recoveryStatus, "", "neutral"));
   loadCaptcha();
 
   forgotPasswordToggle?.addEventListener("click", () => {
@@ -2715,11 +2808,8 @@ async function handleLogin() {
 }
 
 async function renderAccountPage() {
-  const user = getStoredUser();
-  if (!user) {
-    redirectToPage("Login.html");
-    return;
-  }
+  const user = requireAuthenticatedPageUser();
+  if (!user) return;
 
   let profile = mergedProfileData(user, null);
   let profileLoadError = "";
@@ -3096,18 +3186,14 @@ async function renderAccountPage() {
 }
 
 async function renderOrdersPage() {
-  const user = getStoredUser();
+  const user = requireAuthenticatedPageUser();
+  if (!user) return;
   const container = document.getElementById("ordersList");
   const statsNode = document.getElementById("orderStats");
   const searchInput = document.getElementById("orderSearchInput");
   const statusFilter = document.getElementById("orderStatusFilter");
   const ordersStatus = document.getElementById("ordersStatus");
   if (!container) return;
-  if (!user) {
-    container.innerHTML = "<p class=\"empty-copy\">Login to view your orders.</p>";
-    return;
-  }
-
   let orders = [];
   try {
     orders = await apiFetch(`/users/${user.id}/orders`);
@@ -3217,14 +3303,11 @@ async function renderOrdersPage() {
 }
 
 async function renderWishlistPage() {
-  const user = getStoredUser();
+  const user = requireAuthenticatedPageUser();
+  if (!user) return;
   const container = document.getElementById("wishlistList");
   const status = document.getElementById("wishlistStatus");
   if (!container) return;
-  if (!user) {
-    container.innerHTML = "<p class=\"empty-copy\">Login to view your wishlist.</p>";
-    return;
-  }
 
   const wishlist = await apiFetch(`/users/${user.id}/wishlist`);
   if (!wishlist.length) {
@@ -3263,15 +3346,19 @@ async function renderWishlistPage() {
 }
 
 async function renderMerchantPage() {
-  const user = getStoredUser();
+  const user = requireAuthenticatedPageUser("Your merchant session is missing or expired. Please login again.");
+  if (!user) return;
   if (!isMerchantUser(user)) {
     redirectToPage("Login.html");
     return;
   }
 
-  document.getElementById("merchantLogoutButton")?.addEventListener("click", () => {
-    logoutCurrentUser();
-  });
+  const merchantLogoutButton = document.getElementById("merchantLogoutButton");
+  if (merchantLogoutButton) {
+    merchantLogoutButton.onclick = () => {
+      logoutCurrentUser();
+    };
+  }
 
   const [dashboard, catalog] = await Promise.all([
     apiFetch(`/merchant/dashboard?user_id=${encodeURIComponent(user.id)}`),
@@ -3308,9 +3395,11 @@ async function renderMerchantPage() {
     `;
   }
 
-  categorySelect.innerHTML = catalog.categories.map((category) => `
-    <option value="${category.id}">${escapeHtml(category.name)}</option>
-  `).join("");
+  categorySelect.innerHTML = catalog.categories.length
+    ? catalog.categories.map((category) => `
+        <option value="${category.id}">${escapeHtml(category.name)}</option>
+      `).join("")
+    : `<option value="">No categories available</option>`;
 
   tableNode.innerHTML = catalog.products.length
     ? catalog.products.map((product) => `
@@ -3349,7 +3438,7 @@ async function renderMerchantPage() {
     });
   });
 
-  form.addEventListener("submit", async (event) => {
+  form.onsubmit = async (event) => {
     event.preventDefault();
     const data = Object.fromEntries(new FormData(form).entries());
     data.featured = form.elements.featured.checked;
@@ -3375,7 +3464,7 @@ async function renderMerchantPage() {
     } catch (error) {
       setStatus(status, error.message, "error");
     }
-  }, { once: true });
+  };
 }
 
 function buildAdminRowActions(actions) {
@@ -3419,14 +3508,23 @@ async function renderAdminPage() {
     redirectToPage("Login.html");
     return;
   }
+  if (!String(getAuthToken() || "").trim()) {
+    setAuthFlashMessage("Your owner session is missing or expired. Please login again.");
+    saveStoredUser(null);
+    redirectToPage("Login.html");
+    return;
+  }
 
   if (!state.adminExpandedSections) {
     state.adminExpandedSections = { ...DEFAULT_ADMIN_EXPANDED_SECTIONS };
   }
 
-  document.getElementById("adminLogoutButton")?.addEventListener("click", () => {
-    logoutCurrentUser();
-  });
+  const adminLogoutButton = document.getElementById("adminLogoutButton");
+  if (adminLogoutButton) {
+    adminLogoutButton.onclick = () => {
+      logoutCurrentUser();
+    };
+  }
   const status = document.getElementById("adminStatus");
   setStatus(status, "Loading owner dashboard…", "neutral");
 
@@ -3508,7 +3606,10 @@ async function renderAdminPage() {
   const imageFileInput = document.getElementById("adminImageFile");
   const imagePreview = document.getElementById("adminImagePreview");
   const imageUploadStatus = document.getElementById("adminImageUploadStatus");
+  const dbMetaNode = document.getElementById("adminDatabaseMeta");
   const dbPathNode = document.getElementById("adminDatabasePath");
+  const dbMaintenanceStatus = document.getElementById("adminDbMaintenanceStatus");
+  const dbMaintenanceResult = document.getElementById("adminDbMaintenanceResult");
   const dbTableSelect = document.getElementById("adminDbTableSelect");
   const dbRefreshButton = document.getElementById("adminDbRefreshButton");
   const dbTableInfo = document.getElementById("adminDbTableInfo");
@@ -3521,7 +3622,10 @@ async function renderAdminPage() {
 
   const queueOwnerSql = (sql, statusMessage) => {
     if (dbQueryInput) dbQueryInput.value = sql;
-    if (dbQueryStatus) setStatus(dbQueryStatus, statusMessage, "success");
+    const nextMessage = isWriteSqlOperation(sql)
+      ? `${statusMessage} This write will require confirmation before it runs.`
+      : statusMessage;
+    if (dbQueryStatus) setStatus(dbQueryStatus, nextMessage, "success");
     document.getElementById("adminDbQuery")?.scrollIntoView({ behavior: "smooth", block: "center" });
     dbQueryInput?.focus();
   };
@@ -3704,8 +3808,30 @@ async function renderAdminPage() {
       : "<p class=\"empty-copy\">No active category discounts right now.</p>";
   }
 
+  if (dbMetaNode) {
+    const dbHealthCards = [
+      ["Engine", String(dbOverview.health?.engine || "unknown").toUpperCase()],
+      ["Quick Check", dbOverview.health?.quick_check || "Unknown"],
+      ["Foreign Keys", dbOverview.health?.foreign_keys_enabled === true ? "On" : dbOverview.health?.foreign_keys_enabled === false ? "Off" : "Unknown"],
+      ["Storage", formatBytes(dbOverview.storage?.total_size_bytes || dbOverview.storage?.file_size_bytes || 0)],
+      ["Backups", dbOverview.backup_count || dbOverview.backups.length || 0]
+    ];
+    dbMetaNode.innerHTML = dbHealthCards.map(([label, value]) => `
+      <article class="stat-card">
+        <strong>${escapeHtml(String(value))}</strong>
+        <span>${escapeHtml(label)}</span>
+      </article>
+    `).join("");
+  }
+
   if (dbPathNode) {
-    dbPathNode.textContent = `Database file: ${dbOverview.database_path}`;
+    const infoBits = [
+      `Database path: ${dbOverview.database_path}`,
+      dbOverview.health?.journal_mode ? `Journal mode: ${dbOverview.health.journal_mode}` : "",
+      dbOverview.storage?.last_modified_at ? `Last updated: ${formatDateTime(dbOverview.storage.last_modified_at)}` : "",
+      dbOverview.backups?.[0]?.created_at ? `Latest backup: ${formatDateTime(dbOverview.backups[0].created_at)}` : "No backup created yet"
+    ].filter(Boolean);
+    dbPathNode.textContent = infoBits.join(" · ");
   }
 
   if (dbTableSelect) {
@@ -4180,13 +4306,36 @@ async function renderAdminPage() {
     }
     try {
       const payload = await apiFetch(`/admin/database/table/${encodeURIComponent(tableName)}${buildOwnerQuery(user)}&limit=50`);
-      setStatus(dbTableInfo, `Showing ${payload.rows.length} of ${payload.total_rows} rows from ${payload.table}.`, "success");
+      const redactionNote = payload.redacted_columns?.length ? ` Sensitive columns are redacted: ${payload.redacted_columns.join(", ")}.` : "";
+      const truncationNote = payload.truncated ? " Preview truncated to the selected limit." : "";
+      setStatus(
+        dbTableInfo,
+        `Showing ${payload.rows.length} of ${payload.total_rows} rows from ${payload.table}.${redactionNote}${truncationNote}`,
+        "success"
+      );
       renderDatabaseTable(dbPreview, payload.columns, payload.rows);
     } catch (error) {
       setStatus(dbTableInfo, error.message, "error");
       renderDatabaseTable(dbPreview, [], []);
     }
   }
+
+  document.querySelectorAll("[data-db-maintenance-action]").forEach((button) => {
+    button.onclick = async () => {
+      const action = button.dataset.dbMaintenanceAction || "";
+      try {
+        const result = await apiFetch(`/admin/database/maintenance${buildOwnerQuery(user)}`, {
+          method: "POST",
+          body: JSON.stringify({ action })
+        });
+        setStatus(dbMaintenanceStatus, result.message || "Database maintenance completed.", "success");
+        renderDatabaseTable(dbMaintenanceResult, result.columns || [], result.rows || []);
+      } catch (error) {
+        setStatus(dbMaintenanceStatus, error.message, "error");
+        renderDatabaseTable(dbMaintenanceResult, [], []);
+      }
+    };
+  });
 
   if (dbRefreshButton) dbRefreshButton.onclick = loadOwnerDatabaseTable;
   if (dbTableSelect) dbTableSelect.onchange = loadOwnerDatabaseTable;
@@ -4195,15 +4344,26 @@ async function renderAdminPage() {
   if (dbQueryForm) dbQueryForm.onsubmit = async (event) => {
     event.preventDefault();
     try {
+      const sql = dbQueryInput?.value || "";
+      const operation = getSqlOperation(sql);
+      const allowWrite = isWriteSqlOperation(sql)
+        ? window.confirm(`This ${operation} statement will change live SwiftCart data. Continue?`)
+        : false;
+      if (isWriteSqlOperation(sql) && !allowWrite) {
+        setStatus(dbQueryStatus, "Write cancelled before execution.", "neutral");
+        return;
+      }
       const result = await apiFetch(`/admin/database/query${buildOwnerQuery(user)}`, {
         method: "POST",
-        body: JSON.stringify({ sql: dbQueryInput?.value || "" })
+        body: JSON.stringify({ sql, allow_write: allowWrite })
       });
+      const rowMessage = result.columns.length
+        ? `${result.operation} returned ${result.returned_rows ?? result.rows.length} row(s)${result.truncated ? `, showing the first ${result.max_rows}.` : "."}`
+        : `${result.operation} affected ${result.affected_rows} row(s).`;
+      const redactionNote = result.redacted_columns?.length ? ` Sensitive columns are redacted: ${result.redacted_columns.join(", ")}.` : "";
       setStatus(
         dbQueryStatus,
-        result.columns.length
-          ? `${result.operation} returned ${result.rows.length} rows.`
-          : `${result.operation} affected ${result.affected_rows} rows.`,
+        `${rowMessage}${redactionNote}`,
         "success"
       );
       renderDatabaseTable(dbQueryResult, result.columns, result.rows);
@@ -4396,7 +4556,7 @@ async function renderAdminPage() {
     };
   }
 
-  form.addEventListener("submit", async (event) => {
+  form.onsubmit = async (event) => {
     event.preventDefault();
     const data = Object.fromEntries(new FormData(form).entries());
     data.featured = form.elements.featured.checked;
@@ -4434,7 +4594,7 @@ async function renderAdminPage() {
     } catch (error) {
       setStatus(status, error.message, "error");
     }
-  }, { once: true });
+  };
 }
 
 document.addEventListener("DOMContentLoaded", async () => {

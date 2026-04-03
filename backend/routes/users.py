@@ -242,6 +242,29 @@ def _normalize_mobile(value: str) -> str:
     return f"+{digits}"
 
 
+def _normalize_login_identifier(value: str) -> str:
+    return str(value or "").strip()
+
+
+def _find_user_by_login_identifier(session, identifier: str) -> User | None:
+    normalized = _normalize_login_identifier(identifier)
+    if not normalized:
+        return None
+
+    normalized_lower = normalized.lower()
+    return (
+        session.query(User)
+        .filter(
+            or_(
+                func.lower(User.email) == normalized_lower,
+                User.unique_code == normalized,
+            )
+        )
+        .order_by(User.created_at.asc())
+        .first()
+    )
+
+
 def _mobile_variants(value: str) -> list[str]:
     raw = str(value or "").strip()
     digits = "".join(ch for ch in raw if ch.isdigit())
@@ -360,7 +383,8 @@ def auth_captcha():
 @users_bp.post("/auth/request-otp")
 def request_otp():
     payload = request.get_json(silent=True) or {}
-    email = payload.get("email", "").strip().lower()
+    identifier = _normalize_login_identifier(payload.get("email", ""))
+    email = identifier.lower()
     mobile = _normalize_mobile(payload.get("mobile", ""))
     purpose = payload.get("purpose", "register").strip() or "register"
     captcha_id = payload.get("captcha_id", "")
@@ -380,14 +404,15 @@ def request_otp():
                 return jsonify({"message": "An account with this email already exists."}), 409
         elif purpose in {"login", "recover"}:
             linked_accounts = []
-            if email:
-                existing_user = session.query(User).filter(User.email == email).first()
+            if identifier:
+                existing_user = _find_user_by_login_identifier(session, identifier)
                 if not existing_user:
-                    return jsonify({"message": "No account found for this email."}), 404
+                    return jsonify({"message": "No account found for this email address or user code."}), 404
                 banned_error = _ensure_user_is_active(existing_user)
                 if banned_error:
                     return banned_error
                 mobile = _normalize_mobile(existing_user.mobile)
+                email = existing_user.email
                 linked_accounts = [serialize_user(existing_user)]
             elif mobile:
                 users = _find_users_by_mobile(session, mobile)
@@ -449,12 +474,12 @@ def verify_otp():
 def login_with_otp():
     payload = request.get_json(silent=True) or {}
     otp_session_id = payload.get("otp_session_id")
-    email = payload.get("email", "").strip().lower()
+    identifier = _normalize_login_identifier(payload.get("email", ""))
     mobile = _normalize_mobile(payload.get("mobile", ""))
     user_id = payload.get("user_id")
 
-    if not otp_session_id or (not email and not mobile):
-        return jsonify({"message": "otp_session_id with email or mobile is required."}), 400
+    if not otp_session_id or (not identifier and not mobile):
+        return jsonify({"message": "otp_session_id with email, user code, or mobile is required."}), 400
 
     with session_scope() as session:
         otp = session.query(OtpCode).filter(OtpCode.id == otp_session_id).first()
@@ -468,10 +493,12 @@ def login_with_otp():
             return jsonify({"message": "This OTP session has already been used."}), 400
         if otp.expires_at < datetime.utcnow():
             return jsonify({"message": "OTP expired. Please request a new one."}), 400
-        if email:
-            if otp.email != email:
-                return jsonify({"message": "OTP does not match this email."}), 400
-            user = session.query(User).filter(User.email == email).first()
+        if identifier:
+            user = _find_user_by_login_identifier(session, identifier)
+            if not user:
+                return jsonify({"message": "User not found."}), 404
+            if otp.email != user.email:
+                return jsonify({"message": "OTP does not match this email address or user code."}), 400
         else:
             if _normalize_mobile(otp.mobile) != mobile:
                 return jsonify({"message": "OTP does not match this mobile number."}), 400
@@ -507,14 +534,14 @@ def login_with_otp():
 def reset_password_with_otp():
     payload = request.get_json(silent=True) or {}
     otp_session_id = payload.get("otp_session_id")
-    email = payload.get("email", "").strip().lower()
+    identifier = _normalize_login_identifier(payload.get("email", ""))
     mobile = _normalize_mobile(payload.get("mobile", ""))
     user_id = payload.get("user_id")
     new_password = payload.get("new_password", "")
     confirm_password = payload.get("confirm_password", "")
 
-    if not otp_session_id or (not email and not mobile):
-        return jsonify({"message": "otp_session_id with email or mobile is required."}), 400
+    if not otp_session_id or (not identifier and not mobile):
+        return jsonify({"message": "otp_session_id with email, user code, or mobile is required."}), 400
     if not new_password or not confirm_password:
         return jsonify({"message": "New password and confirm password are required."}), 400
     if new_password != confirm_password:
@@ -535,10 +562,12 @@ def reset_password_with_otp():
         if otp.expires_at < datetime.utcnow():
             return jsonify({"message": "OTP expired. Please request a new one."}), 400
 
-        if email:
-            if otp.email != email:
-                return jsonify({"message": "OTP does not match this email."}), 400
-            user = session.query(User).filter(User.email == email).first()
+        if identifier:
+            user = _find_user_by_login_identifier(session, identifier)
+            if not user:
+                return jsonify({"message": "User not found."}), 404
+            if otp.email != user.email:
+                return jsonify({"message": "OTP does not match this email address or user code."}), 400
         else:
             if _normalize_mobile(otp.mobile) != mobile:
                 return jsonify({"message": "OTP does not match this mobile number."}), 400
@@ -664,7 +693,7 @@ def register():
 @users_bp.post("/auth/login")
 def login():
     payload = request.get_json(silent=True) or {}
-    email = payload.get("email", "").strip().lower()
+    identifier = _normalize_login_identifier(payload.get("email", ""))
     password = payload.get("password", "")
     captcha_id = payload.get("captcha_id", "")
     captcha_answer = payload.get("captcha_answer", "")
@@ -674,17 +703,17 @@ def login():
         return jsonify({"message": captcha_message}), 400
 
     with session_scope() as session:
-        user = session.query(User).filter(func.lower(User.email) == email).first()
+        user = _find_user_by_login_identifier(session, identifier)
         password_ok = bool(user and check_password_hash(user.password_hash, password))
         if not password_ok:
-            repaired_owner = _repair_or_bootstrap_owner_account(session, email, password)
+            repaired_owner = _repair_or_bootstrap_owner_account(session, identifier, password)
             if repaired_owner:
                 user = repaired_owner
                 password_ok = True
         if user and not password_ok:
             password_ok = _sync_owner_credentials_if_needed(session, user, password)
         if not user or not password_ok:
-            return jsonify({"message": "Invalid email or password."}), 401
+            return jsonify({"message": "Invalid email, user code, or password."}), 401
         banned_error = _ensure_user_is_active(user)
         if banned_error:
             return banned_error

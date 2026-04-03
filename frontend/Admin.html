@@ -334,7 +334,17 @@
       </div>
       <div id="adminDatabasePanel" hidden>
         <div id="adminDbTablesList" class="admin-product-table"></div>
+        <div id="adminDatabaseMeta" class="admin-stats"></div>
         <p id="adminDatabasePath" class="lead-copy"></p>
+        <div class="inline-form-actions db-maintenance-actions">
+          <button class="ghost-button" type="button" data-db-maintenance-action="restore_seed_data">Restore Seed Data</button>
+          <button class="ghost-button" type="button" data-db-maintenance-action="integrity_check">Integrity Check</button>
+          <button class="ghost-button" type="button" data-db-maintenance-action="wal_checkpoint">Checkpoint WAL</button>
+          <button class="ghost-button" type="button" data-db-maintenance-action="vacuum">Vacuum</button>
+          <button class="ghost-button" type="button" data-db-maintenance-action="backup">Backup DB</button>
+        </div>
+        <p id="adminDbMaintenanceStatus" class="status-copy"></p>
+        <div id="adminDbMaintenanceResult" class="db-preview"></div>
         <div class="db-toolbar">
           <select id="adminDbTableSelect"></select>
           <button id="adminDbRefreshButton" class="ghost-button" type="button">Load Table</button>
@@ -342,9 +352,10 @@
         <div id="adminDbTableInfo" class="status-copy"></div>
         <div id="adminDbPreview" class="db-preview"></div>
         <form id="adminDbQueryForm" class="admin-form">
-          <textarea id="adminDbQuery" name="sql" rows="6" placeholder="Run one SQL statement, for example: SELECT * FROM users LIMIT 20"></textarea>
+          <textarea id="adminDbQuery" name="sql" rows="6" placeholder="Run one SQL statement. Example: SELECT * FROM users LIMIT 20"></textarea>
           <button class="btn inline-button" type="submit">Run SQL</button>
         </form>
+        <p class="status-copy"><code>SELECT</code>, safe <code>PRAGMA</code>, and <code>EXPLAIN SELECT</code> are read-only. <code>INSERT</code>, <code>UPDATE</code>, and <code>DELETE</code> require confirmation. Schema-changing SQL is blocked.</p>
         <p id="adminDbQueryStatus" class="status-copy"></p>
         <div id="adminDbQueryResult" class="db-preview"></div>
       </div>

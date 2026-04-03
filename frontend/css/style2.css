@@ -1358,6 +1358,15 @@ span{
     align-items:center;
 }
 
+.db-maintenance-actions{
+    grid-template-columns:repeat(auto-fit, minmax(150px, 1fr));
+    margin:12px 0;
+}
+
+.db-maintenance-actions .ghost-button{
+    width:100%;
+}
+
 #adminSecondaryCategoriesSelect{
     min-height:112px;
     padding:12px 14px;
