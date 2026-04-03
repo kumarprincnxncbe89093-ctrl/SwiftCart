@@ -93,6 +93,7 @@ Notes:
 
 - Do not keep hardcoded owner or demo passwords in code or Railway variables screenshots.
 - Keep `ENABLE_DEMO_MERCHANT=0` unless you intentionally want a demo seller account.
+- `SWIFTCART_EXPOSE_OTP_PREVIEW=1` forces OTP preview responses for testing. Localhost and private-network hosting now show OTP previews automatically even if you run with production-like settings.
 - SwiftCart now uses signed auth tokens for protected API routes, so users must log in again after deployment if they had an old local session stored in the browser.
 
 ## 6. Initialize the app once

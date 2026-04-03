@@ -8,12 +8,14 @@ from datetime import datetime, timedelta
 import json
 from pathlib import Path
 from re import search, sub
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, create_engine, event, text
+import bcrypt
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, create_engine, event, inspect, text
 from sqlalchemy.engine import URL
 from sqlalchemy.exc import ArgumentError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
-from werkzeug.security import generate_password_hash
+from werkzeug.security import check_password_hash
 
 from backend.imported_product_benchmarks import IMPORTED_PRODUCT_MARKET_DATA
 
@@ -31,6 +33,11 @@ def _env_int(name: str, default: int) -> int:
     except ValueError:
         logger.warning("Invalid integer for %s=%r. Falling back to %s.", name, raw_value, default)
         return default
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw_value = str(os.getenv(name, "1" if default else "0")).strip().lower()
+    return raw_value in {"1", "true", "yes", "on"}
 
 
 def _normalize_database_url(raw_url: str | None) -> str:
@@ -65,6 +72,16 @@ def _normalize_database_url(raw_url: str | None) -> str:
     if url.startswith("postgresql://"):
         return "postgresql+psycopg://" + url[len("postgresql://") :]
     return url
+
+
+def _ensure_postgres_sslmode(url: str) -> str:
+    if not url or url.startswith("sqlite"):
+        return url
+
+    parts = urlsplit(url)
+    query_items = dict(parse_qsl(parts.query, keep_blank_values=True))
+    query_items.setdefault("sslmode", os.getenv("PGSSLMODE", "require").strip() or "require")
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query_items), parts.fragment))
 
 
 def _looks_like_placeholder_database_url(url: str) -> bool:
@@ -139,13 +156,38 @@ def _resolve_database_url() -> str:
     return DEFAULT_SQLITE_URL
 
 
-DATABASE_URL = _resolve_database_url()
-OWNER_EMAIL = (os.getenv("OWNER_EMAIL") or "prince12345@gmail.com").strip().lower()
-OWNER_PASSWORD = (os.getenv("OWNER_PASSWORD") or "172388Pr").strip()
-MERCHANT_DEMO_EMAIL = (os.getenv("MERCHANT_DEMO_EMAIL") or "merchant@swiftcart.com").strip().lower()
-MERCHANT_DEMO_PASSWORD = (os.getenv("MERCHANT_DEMO_PASSWORD") or "").strip()
-ENABLE_DEMO_MERCHANT = str(os.getenv("ENABLE_DEMO_MERCHANT", "0")).strip().lower() in {"1", "true", "yes", "on"}
-ROTATE_SEEDED_PASSWORDS = str(os.getenv("ROTATE_SEEDED_PASSWORDS", "0")).strip().lower() in {"1", "true", "yes", "on"}
+DATABASE_URL = _ensure_postgres_sslmode(_resolve_database_url())
+OWNER_EMAIL = (os.getenv("OWNER_EMAIL") or "owner@demo.com").strip().lower()
+OWNER_PASSWORD = (os.getenv("OWNER_PASSWORD") or "123456").strip()
+MERCHANT_DEMO_EMAIL = (os.getenv("MERCHANT_DEMO_EMAIL") or "merchant@demo.com").strip().lower()
+MERCHANT_DEMO_PASSWORD = (os.getenv("MERCHANT_DEMO_PASSWORD") or "123456").strip()
+BUYER_DEMO_EMAIL = (os.getenv("BUYER_DEMO_EMAIL") or "user@demo.com").strip().lower()
+BUYER_DEMO_PASSWORD = (os.getenv("BUYER_DEMO_PASSWORD") or "123456").strip()
+ENABLE_DEMO_MERCHANT = _env_flag("ENABLE_DEMO_MERCHANT", True)
+ROTATE_SEEDED_PASSWORDS = _env_flag("ROTATE_SEEDED_PASSWORDS", False)
+BCRYPT_ROUNDS = max(_env_int("BCRYPT_ROUNDS", 10), 4)
+
+
+def is_bcrypt_hash(value: str | None) -> bool:
+    return str(value or "").strip().startswith("$2")
+
+
+def hash_password(password: str) -> str:
+    raw_password = str(password or "")
+    return bcrypt.hashpw(raw_password.encode("utf-8"), bcrypt.gensalt(rounds=BCRYPT_ROUNDS)).decode("utf-8")
+
+
+def verify_password(stored_hash: str | None, password: str) -> bool:
+    stored_value = str(stored_hash or "").strip()
+    raw_password = str(password or "")
+    if not stored_value:
+        return False
+    if is_bcrypt_hash(stored_value):
+        try:
+            return bcrypt.checkpw(raw_password.encode("utf-8"), stored_value.encode("utf-8"))
+        except ValueError:
+            return False
+    return check_password_hash(stored_value, raw_password)
 
 SQLALCHEMY_ENGINE_KWARGS = {
     "future": True,
@@ -250,6 +292,7 @@ class Product(Base, TimestampMixin):
     deal_of_the_day: Mapped[bool] = mapped_column(default=False, nullable=False)
     category_id: Mapped[int] = mapped_column(ForeignKey("categories.id"), nullable=False)
     seller_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    role: Mapped[str] = mapped_column(String(40), default="owner", nullable=False)
 
     category: Mapped[Category] = relationship(back_populates="products")
     seller: Mapped["User | None"] = relationship(back_populates="listed_products", foreign_keys=[seller_id])
@@ -438,6 +481,9 @@ def session_scope():
 def serialize_product(product: Product) -> dict:
     category = getattr(product, "category", None)
     stock_value = max(int(product.stock or 0), 0)
+    product_role = str(getattr(product, "role", "") or "").strip().lower()
+    if product_role not in {"owner", "merchant"}:
+        product_role = "merchant" if getattr(product, "seller_id", None) else "owner"
     if stock_value <= 0:
         stock_status = "Out of Stock"
         stock_status_key = "out_of_stock"
@@ -470,7 +516,9 @@ def serialize_product(product: Product) -> dict:
         "deal_of_the_day": product.deal_of_the_day,
         "created_at": product.created_at.isoformat(),
         "updated_at": product.updated_at.isoformat(),
+        "user_id": product.seller_id,
         "seller_id": product.seller_id,
+        "role": product_role,
         "seller_name": (
             f"{product.seller.first_name} {product.seller.last_name}".strip()
             if getattr(product, "seller", None)
@@ -502,6 +550,7 @@ def serialize_user(user: User) -> dict:
         "email": user.email,
         "mobile": user.mobile,
         "account_type": user.account_type,
+        "role": user.account_type,
         "shop_name": user.shop_name,
         "gstin": user.gstin,
         "profile_image": user.profile_image,
@@ -740,8 +789,21 @@ def log_user_change(session, *, user_id: int, field_name: str, old_value: str | 
 
 def ensure_schema_updates() -> None:
     if not _uses_sqlite():
-        # These legacy ALTER TABLE checks rely on SQLite PRAGMA syntax.
-        # Postgres deployments should use the SQLAlchemy models directly.
+        with engine.begin() as connection:
+            inspector = inspect(connection)
+            tables = set(inspector.get_table_names())
+            if "products" in tables:
+                product_columns = {column["name"] for column in inspector.get_columns("products")}
+                if "role" not in product_columns:
+                    connection.execute(
+                        text("ALTER TABLE products ADD COLUMN role VARCHAR(40) NOT NULL DEFAULT 'owner'")
+                    )
+                connection.execute(
+                    text("UPDATE products SET role = 'merchant' WHERE seller_id IS NOT NULL AND (role IS NULL OR role = '' OR role = 'owner')")
+                )
+                connection.execute(
+                    text("UPDATE products SET role = 'owner' WHERE seller_id IS NULL AND (role IS NULL OR role = '')")
+                )
         return
 
     with engine.begin() as connection:
@@ -859,6 +921,16 @@ def ensure_schema_updates() -> None:
             connection.execute(
                 text("ALTER TABLE products ADD COLUMN secondary_categories TEXT NOT NULL DEFAULT ''")
             )
+        if "role" not in product_columns:
+            connection.execute(
+                text("ALTER TABLE products ADD COLUMN role VARCHAR(40) NOT NULL DEFAULT 'owner'")
+            )
+        connection.execute(
+            text("UPDATE products SET role = 'merchant' WHERE seller_id IS NOT NULL AND (role IS NULL OR role = '' OR role = 'owner')")
+        )
+        connection.execute(
+            text("UPDATE products SET role = 'owner' WHERE seller_id IS NULL AND (role IS NULL OR role = '')")
+        )
 
         order_columns = {
             row[1]
@@ -912,6 +984,15 @@ def ensure_schema_updates() -> None:
                 item.status = "Cancelled" if item.order and item.order.status.lower() == "cancelled" else "Placed"
             if item.status.lower() == "cancelled" and not item.canceled_at:
                 item.canceled_at = item.order.canceled_at if item.order else item.created_at
+
+        for product in session.query(Product).all():
+            normalized_role = str(product.role or "").strip().lower()
+            if normalized_role not in {"owner", "merchant"}:
+                product.role = "merchant" if product.seller_id else "owner"
+            elif product.seller_id and normalized_role != "merchant":
+                product.role = "merchant"
+            elif not product.seller_id and normalized_role != "owner":
+                product.role = "owner"
 
 
 def _should_sync_imported_gallery_products_on_startup() -> bool:
@@ -1061,6 +1142,7 @@ def sync_imported_gallery_products() -> None:
                     featured=index <= 8,
                     deal_of_the_day=index <= 4,
                     category_id=category.id,
+                    role="owner",
                 )
             )
 
@@ -1397,6 +1479,7 @@ def seed_data() -> None:
                 delivery_note=row["delivery_note"],
                 featured=row["featured"],
                 deal_of_the_day=row["deal_of_the_day"],
+                role="owner",
             )
             session.add(product)
             products.append(product)
@@ -1423,20 +1506,31 @@ def seed_data() -> None:
             for product in fallback_deals:
                 product.deal_of_the_day = True
 
-        demo_user = session.query(User).filter(User.email == "demo@swiftcart.com").first()
+        demo_user = (
+            session.query(User)
+            .filter(User.email.in_([BUYER_DEMO_EMAIL, "demo@swiftcart.com"]))
+            .order_by(User.created_at.asc())
+            .first()
+        )
         if not demo_user:
             demo_user = User(
                 first_name="Prince",
                 last_name="Kumar",
-                email="demo@swiftcart.com",
+                email=BUYER_DEMO_EMAIL,
                 mobile="+918229069530",
-                password_hash=generate_password_hash("SwiftCart@123"),
+                password_hash=hash_password(BUYER_DEMO_PASSWORD),
                 unique_code=generate_unique_code(session),
                 account_type="buyer",
                 password_changed_at=datetime.utcnow(),
             )
             session.add(demo_user)
             session.flush()
+        else:
+            demo_user.email = BUYER_DEMO_EMAIL
+            demo_user.account_type = "buyer"
+            if ROTATE_SEEDED_PASSWORDS or not verify_password(demo_user.password_hash, BUYER_DEMO_PASSWORD):
+                demo_user.password_hash = hash_password(BUYER_DEMO_PASSWORD)
+                demo_user.password_changed_at = datetime.utcnow()
 
         if demo_user and not demo_user.addresses:
             session.add(
@@ -1490,14 +1584,20 @@ def ensure_owner_account() -> None:
         logger.warning("Skipping automatic owner seeding because OWNER_PASSWORD is not configured.")
         return
     with session_scope() as session:
+        legacy_owner_emails = (OWNER_EMAIL.lower(), "owner@swiftcart.com", "prince12345@gmail.com")
         owner = (
             session.query(User)
             .filter(
                 text(
-                    "lower(email) = :new_email OR lower(email) = :old_email OR account_type = 'owner'"
+                    "lower(email) IN (:configured_email, :legacy_owner_email, :legacy_seed_email)"
                 )
             )
-            .params(new_email=OWNER_EMAIL.lower(), old_email="owner@swiftcart.com")
+            .params(
+                configured_email=legacy_owner_emails[0],
+                legacy_owner_email=legacy_owner_emails[1],
+                legacy_seed_email=legacy_owner_emails[2],
+            )
+            .order_by(User.created_at.asc())
             .first()
         )
         if owner:
@@ -1510,13 +1610,17 @@ def ensure_owner_account() -> None:
                 should_rotate_password = True
             if previous_role != "owner":
                 should_rotate_password = True
-            if should_rotate_password or ROTATE_SEEDED_PASSWORDS:
-                owner.password_hash = generate_password_hash(OWNER_PASSWORD)
+            if should_rotate_password or ROTATE_SEEDED_PASSWORDS or not verify_password(owner.password_hash, OWNER_PASSWORD):
+                owner.password_hash = hash_password(OWNER_PASSWORD)
                 owner.password_changed_at = datetime.utcnow()
             if not owner.first_name:
                 owner.first_name = "Prince"
             if not owner.last_name:
                 owner.last_name = "Kumar"
+            if not owner.mobile:
+                owner.mobile = "+910000000000"
+            if not owner.unique_code:
+                owner.unique_code = generate_unique_code(session)
             if not owner.shop_name:
                 owner.shop_name = "SwiftCart Marketplace"
             if not owner.gstin:
@@ -1528,7 +1632,7 @@ def ensure_owner_account() -> None:
             last_name="Kumar",
             email=OWNER_EMAIL,
             mobile="+910000000000",
-            password_hash=generate_password_hash(OWNER_PASSWORD),
+            password_hash=hash_password(OWNER_PASSWORD),
             unique_code=generate_unique_code(session),
             account_type="owner",
             shop_name="SwiftCart Marketplace",
@@ -1560,37 +1664,119 @@ def ensure_merchant_demo_account() -> None:
             merchant.account_type = "merchant"
             merchant.shop_name = merchant.shop_name or "SwiftCart Merchant Studio"
             merchant.gstin = merchant.gstin or "29MERCHANT1234X1Z5"
-            if ROTATE_SEEDED_PASSWORDS:
-                merchant.password_hash = generate_password_hash(MERCHANT_DEMO_PASSWORD)
+            if not merchant.unique_code:
+                merchant.unique_code = generate_unique_code(session)
+            if ROTATE_SEEDED_PASSWORDS or not verify_password(merchant.password_hash, MERCHANT_DEMO_PASSWORD):
+                merchant.password_hash = hash_password(MERCHANT_DEMO_PASSWORD)
                 merchant.password_changed_at = datetime.utcnow()
-            return
-
-        merchant = User(
-            first_name="Merchant",
-            last_name="Partner",
-            email=MERCHANT_DEMO_EMAIL,
-            mobile="+919876543210",
-            password_hash=generate_password_hash(MERCHANT_DEMO_PASSWORD),
-            unique_code=generate_unique_code(session),
-            account_type="merchant",
-            shop_name="SwiftCart Merchant Studio",
-            gstin="29MERCHANT1234X1Z5",
-            password_changed_at=datetime.utcnow(),
-        )
-        session.add(merchant)
-        session.flush()
-        session.add(
-            Address(
-                user_id=merchant.id,
-                label="Shop",
-                street="Commerce Hub, MG Road",
-                city="Bengaluru",
-                state="Karnataka",
-                pincode="560001",
-                landmark="Merchant support desk",
-                is_default=True,
+        else:
+            merchant = User(
+                first_name="Merchant",
+                last_name="Partner",
+                email=MERCHANT_DEMO_EMAIL,
+                mobile="+919876543210",
+                password_hash=hash_password(MERCHANT_DEMO_PASSWORD),
+                unique_code=generate_unique_code(session),
+                account_type="merchant",
+                shop_name="SwiftCart Merchant Studio",
+                gstin="29MERCHANT1234X1Z5",
+                password_changed_at=datetime.utcnow(),
             )
-        )
+            session.add(merchant)
+            session.flush()
+
+        if not merchant.addresses:
+            session.add(
+                Address(
+                    user_id=merchant.id,
+                    label="Shop",
+                    street="Commerce Hub, MG Road",
+                    city="Bengaluru",
+                    state="Karnataka",
+                    pincode="560001",
+                    landmark="Merchant support desk",
+                    is_default=True,
+                )
+            )
+
+        demo_product_rows = [
+            {
+                "name": "Merchant Oxford Shirt",
+                "slug": "merchant-oxford-shirt",
+                "category_slug": "shirts-tees",
+                "image": "images/Shirt3.png",
+                "price": 1599,
+                "original_price": 2399,
+                "stock": 18,
+                "tag": "Merchant Exclusive",
+                "description": "An owner-approved demo merchant listing for validating merchant product separation.",
+                "highlights": "Merchant managed catalog|Oxford weave|Role-separated listing|Ready for dashboard tests",
+                "specifications": "Fabric=Cotton|Fit=Regular|Seller=Merchant Demo|Origin=India",
+            },
+            {
+                "name": "Merchant Wallet Set",
+                "slug": "merchant-wallet-set",
+                "category_slug": "accessories",
+                "image": "images/sonata.png",
+                "price": 1299,
+                "original_price": 1899,
+                "stock": 11,
+                "tag": "Merchant Pick",
+                "description": "A merchant-seeded demo accessory used to verify product filtering and dashboard counts.",
+                "highlights": "Merchant managed catalog|Gift-ready packaging|Dashboard seed data|Role-based visibility",
+                "specifications": "Material=Leatherette|Set=Wallet Combo|Seller=Merchant Demo|Origin=India",
+            },
+        ]
+        category_map = {
+            category.slug: category
+            for category in session.query(Category).filter(Category.slug.in_([row["category_slug"] for row in demo_product_rows])).all()
+        }
+        existing_products = {
+            product.slug: product
+            for product in session.query(Product).filter(Product.slug.in_([row["slug"] for row in demo_product_rows])).all()
+        }
+        for row in demo_product_rows:
+            category = category_map.get(row["category_slug"])
+            if not category:
+                continue
+            product = existing_products.get(row["slug"])
+            if product:
+                product.name = row["name"]
+                product.image = row["image"]
+                product.price = row["price"]
+                product.original_price = row["original_price"]
+                product.stock = row["stock"]
+                product.tag = row["tag"]
+                product.description = row["description"]
+                product.highlights = row["highlights"]
+                product.specifications = row["specifications"]
+                product.category_id = category.id
+                product.seller_id = merchant.id
+                product.role = "merchant"
+                continue
+
+            session.add(
+                Product(
+                    name=row["name"],
+                    slug=row["slug"],
+                    image=row["image"],
+                    price=row["price"],
+                    original_price=row["original_price"],
+                    rating=4.3,
+                    reviews_count=24,
+                    stock=row["stock"],
+                    tag=row["tag"],
+                    description=row["description"],
+                    highlights=row["highlights"],
+                    specifications=row["specifications"],
+                    delivery_note="Delivery in 2-5 business days",
+                    featured=False,
+                    deal_of_the_day=False,
+                    category_id=category.id,
+                    seller_id=merchant.id,
+                    role="merchant",
+                )
+            )
 
 
 def _parse_key_value_blob(blob: str) -> dict:

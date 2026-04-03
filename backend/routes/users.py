@@ -2,13 +2,13 @@ import os
 import random
 import secrets
 from datetime import datetime, timedelta
+import ipaddress
 from pathlib import Path
 
 from flask import Blueprint, jsonify, request
 from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
-from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 from backend.auth import create_auth_token, require_authenticated_user
@@ -23,6 +23,8 @@ from backend.models import (
     WishlistItem,
     create_otp,
     generate_unique_code,
+    hash_password,
+    is_bcrypt_hash,
     get_password_history,
     log_user_change,
     push_password_history,
@@ -30,6 +32,7 @@ from backend.models import (
     serialize_product,
     serialize_user,
     session_scope,
+    verify_password,
 )
 
 
@@ -38,12 +41,7 @@ PROFILE_UPLOAD_DIR = BASE_DIR.parent / "frontend" / "uploads" / "profiles"
 ALLOWED_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
 CAPTCHA_TTL_SECONDS = 300
 CAPTCHA_SALT = "swiftcart-captcha"
-SHOW_OTP_PREVIEW = str(
-    os.getenv(
-        "SWIFTCART_EXPOSE_OTP_PREVIEW",
-        "0" if (os.getenv("FLASK_ENV") or "").strip().lower() == "production" else "1",
-    )
-).strip().lower() in {"1", "true", "yes", "on"}
+OTP_PREVIEW_OVERRIDE = os.getenv("SWIFTCART_EXPOSE_OTP_PREVIEW")
 
 
 def _title_case(value: str) -> str:
@@ -56,6 +54,26 @@ def _sentence_case(value: str) -> str:
     if not cleaned:
         return ""
     return cleaned[:1].upper() + cleaned[1:]
+
+
+def _is_local_request() -> bool:
+    host = request.host.split(":", 1)[0].strip().lower()
+    if host in {"localhost", "127.0.0.1", "::1", "0.0.0.0"} or host.endswith(".local"):
+        return True
+
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return ip.is_loopback or ip.is_private
+
+
+def _should_show_otp_preview() -> bool:
+    if OTP_PREVIEW_OVERRIDE is not None:
+        return OTP_PREVIEW_OVERRIDE.strip().lower() in {"1", "true", "yes", "on"}
+    if _is_local_request():
+        return True
+    return (os.getenv("FLASK_ENV") or "").strip().lower() != "production"
 
 
 def _require_owner(session):
@@ -81,8 +99,10 @@ def _banned_account_response(user: User):
 
 def _auth_response(user: User) -> dict:
     payload = serialize_user(user)
-    payload["auth_token"] = create_auth_token(user)
+    token = create_auth_token(user)
+    payload["auth_token"] = token
     return {
+        "token": token,
         "user": payload,
     }
 
@@ -95,6 +115,13 @@ def _ensure_user_is_active(user: User):
     if user and user.is_banned:
         return _banned_account_response(user)
     return None
+
+
+def _upgrade_password_hash_if_needed(user: User, raw_password: str) -> None:
+    if not user or not raw_password or is_bcrypt_hash(user.password_hash):
+        return
+    user.password_hash = hash_password(raw_password)
+    user.password_changed_at = datetime.utcnow()
 
 
 def _repair_or_bootstrap_owner_account(session, email: str, password: str) -> User | None:
@@ -112,7 +139,8 @@ def _repair_or_bootstrap_owner_account(session, email: str, password: str) -> Us
         .filter(
             or_(
                 func.lower(User.email) == normalized_owner_email,
-                User.account_type == "owner",
+                func.lower(User.email) == "owner@swiftcart.com",
+                func.lower(User.email) == "prince12345@gmail.com",
             )
         )
         .order_by(User.id.asc())
@@ -125,7 +153,7 @@ def _repair_or_bootstrap_owner_account(session, email: str, password: str) -> Us
             last_name="Kumar",
             email=normalized_owner_email,
             mobile="+910000000000",
-            password_hash=generate_password_hash(configured_owner_password),
+            password_hash=hash_password(configured_owner_password),
             unique_code=generate_unique_code(session),
             account_type="owner",
             shop_name="SwiftCart Marketplace",
@@ -137,7 +165,7 @@ def _repair_or_bootstrap_owner_account(session, email: str, password: str) -> Us
     else:
         owner.account_type = "owner"
         owner.email = normalized_owner_email
-        owner.password_hash = generate_password_hash(configured_owner_password)
+        owner.password_hash = hash_password(configured_owner_password)
         owner.password_changed_at = datetime.utcnow()
         if not owner.first_name:
             owner.first_name = "Prince"
@@ -183,7 +211,7 @@ def _sync_owner_credentials_if_needed(session, user: User, password: str) -> boo
     if normalized_owner_email and str(user.email or "").strip().lower() != normalized_owner_email:
         user.email = normalized_owner_email
     user.account_type = "owner"
-    user.password_hash = generate_password_hash(configured_owner_password)
+    user.password_hash = hash_password(configured_owner_password)
     user.password_changed_at = datetime.utcnow()
     if not user.unique_code:
         user.unique_code = generate_unique_code(session)
@@ -433,7 +461,7 @@ def request_otp():
             "otp_session_id": otp.id,
             "expires_in_seconds": 600,
         }
-        if SHOW_OTP_PREVIEW:
+        if _should_show_otp_preview():
             response["otp_preview"] = otp_value
         if purpose in {"login", "recover"} and mobile:
             response["mobile"] = mobile
@@ -594,7 +622,7 @@ def reset_password_with_otp():
         banned_error = _ensure_user_is_active(user)
         if banned_error:
             return banned_error
-        if check_password_hash(user.password_hash, new_password):
+        if verify_password(user.password_hash, new_password):
             return jsonify({"message": "Choose a different password from the current one."}), 400
 
         push_password_history(user, user.password_hash)
@@ -606,7 +634,7 @@ def reset_password_with_otp():
             new_value="[recovered with OTP]",
             changed_by="otp_recovery",
         )
-        user.password_hash = generate_password_hash(new_password)
+        user.password_hash = hash_password(new_password)
         user.password_changed_at = datetime.utcnow()
         otp.consumed_at = datetime.utcnow()
         return jsonify({"message": "Password reset successfully. You can login now."})
@@ -662,7 +690,7 @@ def register():
             last_name=_title_case(payload["last_name"]),
             email=payload["email"].strip().lower(),
             mobile=_normalize_mobile(payload["mobile"]),
-            password_hash=generate_password_hash(payload["password"]),
+            password_hash=hash_password(payload["password"]),
             unique_code=generate_unique_code(session),
             account_type=account_type,
             shop_name=_title_case(payload.get("shop_name", "")),
@@ -704,16 +732,20 @@ def login():
 
     with session_scope() as session:
         user = _find_user_by_login_identifier(session, identifier)
-        password_ok = bool(user and check_password_hash(user.password_hash, password))
-        if not password_ok:
+        if not user:
             repaired_owner = _repair_or_bootstrap_owner_account(session, identifier, password)
             if repaired_owner:
                 user = repaired_owner
-                password_ok = True
-        if user and not password_ok:
+            else:
+                return jsonify({"message": "Invalid email or user code."}), 401
+
+        password_ok = verify_password(user.password_hash, password)
+        if not password_ok:
             password_ok = _sync_owner_credentials_if_needed(session, user, password)
-        if not user or not password_ok:
-            return jsonify({"message": "Invalid email, user code, or password."}), 401
+        if not password_ok:
+            return jsonify({"message": "Invalid password."}), 401
+
+        _upgrade_password_hash_if_needed(user, password)
         banned_error = _ensure_user_is_active(user)
         if banned_error:
             return banned_error
@@ -745,9 +777,9 @@ def change_password(user_id: int):
         user, error = _require_same_user(session, user_id)
         if error:
             return error
-        if not check_password_hash(user.password_hash, current_password):
+        if not verify_password(user.password_hash, current_password):
             return jsonify({"message": "Current password is incorrect."}), 400
-        if check_password_hash(user.password_hash, new_password):
+        if verify_password(user.password_hash, new_password):
             return jsonify({"message": "Choose a different password from the current one."}), 400
 
         push_password_history(user, user.password_hash)
@@ -759,7 +791,7 @@ def change_password(user_id: int):
             new_value="[updated secure hash]",
             changed_by="user",
         )
-        user.password_hash = generate_password_hash(new_password)
+        user.password_hash = hash_password(new_password)
         user.password_changed_at = datetime.utcnow()
 
         return jsonify(

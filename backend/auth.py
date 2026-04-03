@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime, timedelta, timezone
 
+import jwt
 from flask import jsonify, request
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
@@ -9,6 +11,7 @@ from backend.models import User
 
 
 AUTH_TOKEN_SALT = "swiftcart-auth-token"
+JWT_ALGORITHM = "HS256"
 
 
 def _env_int(name: str, default: int) -> int:
@@ -19,14 +22,14 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
-AUTH_TOKEN_MAX_AGE_SECONDS = _env_int("AUTH_TOKEN_MAX_AGE_SECONDS", 604800)
+AUTH_TOKEN_MAX_AGE_SECONDS = _env_int("AUTH_TOKEN_MAX_AGE_SECONDS", 86400)
 
 
 def _secret_key() -> str:
     return os.getenv("SECRET_KEY", "swiftcart-dev-secret")
 
 
-def _serializer() -> URLSafeTimedSerializer:
+def _legacy_serializer() -> URLSafeTimedSerializer:
     return URLSafeTimedSerializer(_secret_key(), salt=AUTH_TOKEN_SALT)
 
 
@@ -35,11 +38,15 @@ def _password_marker(user: User) -> str:
 
 
 def create_auth_token(user: User) -> str:
+    now = datetime.now(timezone.utc)
     payload = {
-        "user_id": user.id,
+        "id": user.id,
+        "role": user.account_type,
         "pwd": _password_marker(user),
+        "iat": now,
+        "exp": now + timedelta(seconds=AUTH_TOKEN_MAX_AGE_SECONDS),
     }
-    return _serializer().dumps(payload)
+    return jwt.encode(payload, _secret_key(), algorithm=JWT_ALGORITHM)
 
 
 def _extract_auth_token() -> str:
@@ -47,6 +54,20 @@ def _extract_auth_token() -> str:
     if auth_header.lower().startswith("bearer "):
         return auth_header[7:].strip()
     return request.headers.get("X-Auth-Token", "").strip()
+
+
+def _decode_auth_token(token: str) -> dict:
+    try:
+        return jwt.decode(token, _secret_key(), algorithms=[JWT_ALGORITHM])
+    except jwt.ExpiredSignatureError as error:
+        raise SignatureExpired(str(error)) from error
+    except jwt.InvalidTokenError:
+        try:
+            return _legacy_serializer().loads(token, max_age=AUTH_TOKEN_MAX_AGE_SECONDS)
+        except SignatureExpired:
+            raise
+        except BadSignature as error:
+            raise BadSignature(str(error)) from error
 
 
 def require_authenticated_user(
@@ -60,13 +81,13 @@ def require_authenticated_user(
         return None, (jsonify({"message": "Authentication is required."}), 401)
 
     try:
-        payload = _serializer().loads(token, max_age=AUTH_TOKEN_MAX_AGE_SECONDS)
+        payload = _decode_auth_token(token)
     except SignatureExpired:
         return None, (jsonify({"message": "Your session has expired. Please login again.", "force_logout": True}), 401)
     except BadSignature:
         return None, (jsonify({"message": "Your session is invalid. Please login again.", "force_logout": True}), 401)
 
-    user_id = payload.get("user_id")
+    user_id = payload.get("id", payload.get("user_id"))
     if not isinstance(user_id, int):
         return None, (jsonify({"message": "Invalid session payload.", "force_logout": True}), 401)
 

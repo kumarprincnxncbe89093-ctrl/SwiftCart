@@ -4,7 +4,7 @@ import logging
 import os
 from pathlib import Path
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, redirect, request, send_from_directory
 from sqlalchemy.exc import DBAPIError, OperationalError
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -24,17 +24,19 @@ ALLOWED_ORIGINS = {
 }
 CONTENT_SECURITY_POLICY = "; ".join(
     [
-        "default-src 'self'",
+        "default-src 'self' https:",
         "img-src 'self' data: https: blob:",
         "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com",
-        "script-src 'self' 'unsafe-inline'",
+        "script-src 'self'",
         "font-src 'self' data: https://cdnjs.cloudflare.com",
-        "connect-src 'self'",
-        "frame-src https://maps.google.com https://www.google.com",
+        "connect-src 'self' https:",
+        "frame-src 'self' https://maps.google.com https://www.google.com",
         "object-src 'none'",
         "base-uri 'self'",
-        "form-action 'self'",
+        "form-action 'self' https:",
         "frame-ancestors 'none'",
+        "upgrade-insecure-requests",
+        "block-all-mixed-content",
     ]
 )
 logger = logging.getLogger(__name__)
@@ -63,6 +65,18 @@ def create_app() -> Flask:
     app.register_blueprint(users_bp, url_prefix="/api")
     app.register_blueprint(orders_bp, url_prefix="/api")
 
+    def should_force_https() -> bool:
+        return str(
+            os.getenv(
+                "FORCE_HTTPS",
+                "1" if app.config["ENV_NAME"].strip().lower() == "production" else "0",
+            )
+        ).strip().lower() in {"1", "true", "yes", "on"}
+
+    def is_local_host(hostname: str) -> bool:
+        host = hostname.split(":", 1)[0].strip().lower()
+        return host in {"127.0.0.1", "localhost"} or host.endswith(".local")
+
     def database_unavailable_response():
         message = "SwiftCart cannot reach the database right now. Please try again shortly."
         if not app.config.get("DB_INIT_ERROR"):
@@ -77,6 +91,16 @@ def create_app() -> Flask:
             ),
             503,
         )
+
+    @app.before_request
+    def redirect_http_to_https():
+        forwarded_proto = request.headers.get("X-Forwarded-Proto", "")
+        already_secure = request.is_secure or "https" in forwarded_proto.lower()
+        if already_secure or not should_force_https() or is_local_host(request.host):
+            return None
+        secure_url = request.url.replace("http://", "https://", 1)
+        redirect_code = 301 if request.method in {"GET", "HEAD", "OPTIONS"} else 307
+        return redirect(secure_url, code=redirect_code)
 
     @app.before_request
     def gate_api_when_database_is_unavailable():
@@ -100,6 +124,7 @@ def create_app() -> Flask:
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(self)"
         response.headers["Content-Security-Policy"] = CONTENT_SECURITY_POLICY

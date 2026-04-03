@@ -41,6 +41,15 @@ const state = {
 };
 const HOME_CACHE_KEY = "swiftcart-home-cache-v1";
 
+document.addEventListener("error", (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLImageElement)) return;
+  const fallbackSrc = String(target.dataset.fallbackSrc || "").trim();
+  if (!fallbackSrc || target.dataset.fallbackApplied === "1") return;
+  target.dataset.fallbackApplied = "1";
+  target.src = fallbackSrc;
+}, true);
+
 function setStatus(node, message, tone = "neutral") {
   if (!node) return;
   node.textContent = message;
@@ -87,9 +96,11 @@ function sanitizeUrl(value, fallback = "#") {
   if (lowered.startsWith("data:") && !lowered.startsWith("data:image/")) {
     return fallback;
   }
+  if (lowered.startsWith("http://")) {
+    return `https://${raw.slice("http://".length)}`;
+  }
   if (
     lowered.startsWith("https://")
-    || lowered.startsWith("http://")
     || lowered.startsWith("blob:")
     || lowered.startsWith("data:image/")
     || raw.startsWith("/")
@@ -593,7 +604,7 @@ function buildUserAvatarMarkup(user) {
     const photoPrefs = user?.id ? loadProfilePhotoPrefs(user.id) : {};
     const zoom = Number(photoPrefs.zoom) || 1;
     const focus = Number(photoPrefs.focus) || 50;
-    return `<img class="account-avatar-image" src="${escapeHtml(sanitizeUrl(user.profile_image, "images/swift.png"))}" alt="${escapeHtml(user.full_name || user.first_name || "User")}" style="--profile-zoom:${zoom}; --profile-focus:${focus}%;" onerror="this.onerror=null;this.src='images/swift.png';">`;
+    return `<img class="account-avatar-image" src="${escapeHtml(sanitizeUrl(user.profile_image, "images/swift.png"))}" alt="${escapeHtml(user.full_name || user.first_name || "User")}" style="--profile-zoom:${zoom}; --profile-focus:${focus}%;" data-fallback-src="images/swift.png">`;
   }
 
   const seed = String(user?.first_name || user?.full_name || "U").trim().charAt(0).toUpperCase();
@@ -2343,6 +2354,8 @@ async function handleRegistration() {
   const otpSessionIdInput = document.getElementById("otpSessionId");
   const otpCodeInput = document.getElementById("otpCodeInput");
   const sellerFields = document.getElementById("sellerFields");
+  const locationButton = document.getElementById("locationButton");
+  const locationMap = document.getElementById("map");
 
   bindAutoCapitalization([
     form.elements.first_name,
@@ -2369,6 +2382,37 @@ async function handleRegistration() {
     input.addEventListener("change", syncAccountTypeUi);
   });
   syncAccountTypeUi();
+
+  locationButton?.addEventListener("click", () => {
+    if (!navigator.geolocation) {
+      setStatus(registerStatus, "Geolocation is not supported on this device.", "error");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        if (!locationMap) return;
+        const lat = position.coords.latitude;
+        const lon = position.coords.longitude;
+        const frame = document.createElement("iframe");
+        frame.width = "100%";
+        frame.height = "200";
+        frame.loading = "lazy";
+        frame.referrerPolicy = "no-referrer-when-downgrade";
+        frame.src = `https://maps.google.com/maps?q=${encodeURIComponent(lat)},${encodeURIComponent(lon)}&z=15&output=embed`;
+        locationMap.replaceChildren(frame);
+        setStatus(registerStatus, "Live location loaded successfully.", "success");
+      },
+      () => {
+        setStatus(registerStatus, "We could not access your live location right now.", "error");
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 30000,
+      }
+    );
+  });
 
   [form.elements.email, form.elements.mobile].filter(Boolean).forEach((field) => {
     field.addEventListener("input", () => {
@@ -2460,7 +2504,7 @@ async function handleRegistration() {
         method: "POST",
         body: JSON.stringify(payload)
       });
-      saveStoredUser(response.user);
+      saveStoredUser(response.user, response.token);
       setStatus(registerStatus, "Account created successfully. Redirecting to your account...", "success");
       setTimeout(() => {
         redirectToPage(response.user.is_owner ? getOwnerWorkspacePath() : isMerchantUser(response.user) ? "Merchant.html" : "Account_Details.html");
@@ -2605,7 +2649,7 @@ async function handleLogin() {
         method: "POST",
         body: JSON.stringify(payload)
       });
-      saveStoredUser(response.user);
+      saveStoredUser(response.user, response.token);
       setStatus(status, "Login successful. Redirecting...", "success");
       setTimeout(() => {
         redirectToPage(response.user.is_owner ? getOwnerWorkspacePath() : isMerchantUser(response.user) ? "Merchant.html" : "Account_Details.html");
@@ -2695,7 +2739,7 @@ async function handleLogin() {
           otp_session_id: state.loginOtpSessionId
         })
       });
-      saveStoredUser(response.user);
+      saveStoredUser(response.user, response.token);
       setStatus(loginOtpStatus, "OTP login successful. Redirecting...", "success");
       setTimeout(() => {
         redirectToPage(response.user.is_owner ? getOwnerWorkspacePath() : isMerchantUser(response.user) ? "Merchant.html" : "Account_Details.html");

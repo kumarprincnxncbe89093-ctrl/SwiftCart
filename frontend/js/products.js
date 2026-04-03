@@ -1,7 +1,12 @@
-const API_BASE = "/api";
+const RAILWAY_API_ORIGIN = "https://web-production-00035.up.railway.app";
+const API_BASE = new URL(
+  "/api",
+  window.location.protocol === "file:" ? RAILWAY_API_ORIGIN : window.location.origin
+).toString().replace(/\/$/, "");
 const STORAGE_KEYS = {
   cart: "swiftcart-cart",
-  user: "swiftcart-user"
+  user: "swiftcart-user",
+  token: "swiftcart-token"
 };
 
 const EXTRA_SHOWCASE_IMAGES = [
@@ -38,21 +43,27 @@ function getStoredUser() {
   return JSON.parse(localStorage.getItem(STORAGE_KEYS.user) || "null");
 }
 
-function saveStoredUser(user) {
+function saveStoredUser(user, token = "") {
   if (!user) {
     localStorage.removeItem(STORAGE_KEYS.user);
+    localStorage.removeItem(STORAGE_KEYS.token);
     return;
   }
   const existingUser = getStoredUser();
+  const normalizedToken = String(token || user.auth_token || localStorage.getItem(STORAGE_KEYS.token) || "").trim();
   const normalizedUser = {
     ...(existingUser?.auth_token && !user.auth_token ? { auth_token: existingUser.auth_token } : {}),
     ...user,
   };
+  if (normalizedToken) {
+    normalizedUser.auth_token = normalizedToken;
+    localStorage.setItem(STORAGE_KEYS.token, normalizedToken);
+  }
   localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(normalizedUser));
 }
 
 function getAuthToken() {
-  return String(getStoredUser()?.auth_token || "").trim();
+  return String(localStorage.getItem(STORAGE_KEYS.token) || getStoredUser()?.auth_token || "").trim();
 }
 
 function getCart() {

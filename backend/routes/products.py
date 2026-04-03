@@ -1156,7 +1156,7 @@ def merchant_dashboard():
 
         products = (
             session.query(Product)
-            .filter(Product.seller_id == merchant.id)
+            .filter(Product.seller_id == merchant.id, Product.role == "merchant")
             .all()
         )
         return jsonify(
@@ -1183,7 +1183,7 @@ def merchant_list_products():
         products = (
             session.query(Product)
             .options(joinedload(Product.category), joinedload(Product.seller))
-            .filter(Product.seller_id == merchant.id)
+            .filter(Product.seller_id == merchant.id, Product.role == "merchant")
             .order_by(Product.created_at.desc())
             .all()
         )
@@ -1247,6 +1247,7 @@ def merchant_create_product():
             featured=bool(payload.get("featured", False)),
             deal_of_the_day=bool(payload.get("deal_of_the_day", False)),
             seller_id=merchant.id,
+            role="merchant",
         )
         session.add(product)
         session.flush()
@@ -1268,7 +1269,7 @@ def merchant_update_product(product_id: int):
             return error
         product = (
             session.query(Product)
-            .filter(Product.id == product_id, Product.seller_id == merchant.id)
+            .filter(Product.id == product_id, Product.seller_id == merchant.id, Product.role == "merchant")
             .first()
         )
         if not product:
@@ -1350,8 +1351,8 @@ def admin_dashboard():
         discounted_product_count = sum(
             1 for product in all_products if float(product.original_price or 0) > float(product.price or 0)
         )
-        seller_listed_count = sum(1 for product in all_products if product.seller_id is not None)
-        managed_catalog_count = product_count - seller_listed_count
+        seller_listed_count = sum(1 for product in all_products if product.role == "merchant")
+        managed_catalog_count = sum(1 for product in all_products if product.role == "owner")
         featured_count = sum(1 for product in all_products if product.featured)
         user_count = session.query(User).count()
         order_count = session.query(Order).count()
@@ -1804,6 +1805,7 @@ def admin_list_products():
         products = (
             session.query(Product)
             .options(joinedload(Product.category), joinedload(Product.seller))
+            .filter(Product.role == "owner")
             .order_by(Product.created_at.desc())
             .all()
         )
@@ -2058,6 +2060,7 @@ def admin_create_product():
             delivery_note=_sentence_case(payload.get("delivery_note", "")) or "Delivery in 2-5 business days",
             featured=bool(payload.get("featured", False)),
             deal_of_the_day=bool(payload.get("deal_of_the_day", False)),
+            role="owner",
         )
         session.add(product)
         session.flush()
@@ -2078,7 +2081,7 @@ def admin_update_product(product_id: int):
         owner, error = _require_owner(session)
         if error:
             return error
-        product = session.query(Product).filter(Product.id == product_id).first()
+        product = session.query(Product).filter(Product.id == product_id, Product.role == "owner").first()
         if not product:
             return jsonify({"message": "Product not found."}), 404
 
@@ -2149,7 +2152,7 @@ def admin_delete_product(product_id: int):
         owner, error = _require_owner(session)
         if error:
             return error
-        product = session.query(Product).filter(Product.id == product_id).first()
+        product = session.query(Product).filter(Product.id == product_id, Product.role == "owner").first()
         if not product:
             return jsonify({"message": "Product not found."}), 404
 
