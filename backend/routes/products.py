@@ -1,9 +1,11 @@
 from datetime import datetime, timedelta
 import secrets
 from pathlib import Path
+import sqlite3
 
 from flask import Blueprint, jsonify, request
 from sqlalchemy import and_, inspect, or_, text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import joinedload
 from werkzeug.utils import secure_filename
 
@@ -32,6 +34,38 @@ from backend.models import (
 products_bp = Blueprint("products", __name__)
 PRODUCT_UPLOAD_DIR = BASE_DIR.parent / "frontend" / "uploads" / "products"
 ALLOWED_PRODUCT_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
+DATABASE_BACKUP_DIR = BASE_DIR / "database_backups"
+ADMIN_DB_QUERY_MAX_ROWS = 200
+ADMIN_DB_READ_ONLY_PRAGMAS = {
+    "compile_options",
+    "database_list",
+    "foreign_key_list",
+    "foreign_keys",
+    "freelist_count",
+    "index_info",
+    "index_list",
+    "index_xinfo",
+    "journal_mode",
+    "page_count",
+    "schema_version",
+    "table_info",
+    "table_xinfo",
+    "user_version",
+}
+ADMIN_DB_WRITE_OPERATIONS = {"INSERT", "UPDATE", "DELETE"}
+ADMIN_DB_BLOCKED_OPERATIONS = {
+    "ALTER",
+    "ANALYZE",
+    "ATTACH",
+    "CREATE",
+    "DETACH",
+    "DROP",
+    "REINDEX",
+    "REPLACE",
+    "TRUNCATE",
+    "VACUUM",
+}
+ADMIN_DB_REDACTED_COLUMNS = {"code", "password_hash", "password_history"}
 
 
 def _title_case(value: str) -> str:
@@ -128,6 +162,208 @@ def _normalize_sql_statement(sql: str) -> str:
     if ";" in statement:
         raise ValueError("Only one SQL statement is allowed at a time.")
     return statement
+
+
+def _sql_operation(statement: str) -> str:
+    return statement.lstrip().split(None, 1)[0].upper()
+
+
+def _validate_admin_pragma(statement: str) -> None:
+    pragma_body = statement[len("PRAGMA") :].strip()
+    if not pragma_body:
+        raise ValueError("PRAGMA name is required.")
+    if "=" in pragma_body:
+        raise ValueError("PRAGMA assignments are blocked. Use the database maintenance controls instead.")
+    pragma_name = pragma_body.split("(", 1)[0].split(None, 1)[0].strip().lower()
+    if "." in pragma_name:
+        pragma_name = pragma_name.split(".")[-1]
+    if pragma_name not in ADMIN_DB_READ_ONLY_PRAGMAS:
+        raise ValueError(
+            "Only read-only PRAGMA statements are allowed here. Use the database maintenance controls for repair tasks."
+        )
+
+
+def _validate_admin_sql_statement(statement: str, *, allow_write: bool) -> tuple[str, bool]:
+    operation = _sql_operation(statement)
+    normalized_upper = " ".join(statement.upper().split())
+
+    if operation in ADMIN_DB_BLOCKED_OPERATIONS:
+        raise ValueError(
+            f"{operation} statements are blocked from the SQL console. Use the owner maintenance controls instead."
+        )
+
+    if operation == "SELECT":
+        return operation, False
+
+    if operation == "PRAGMA":
+        _validate_admin_pragma(statement)
+        return operation, False
+
+    if operation == "EXPLAIN":
+        if not (
+            normalized_upper.startswith("EXPLAIN SELECT ")
+            or normalized_upper.startswith("EXPLAIN QUERY PLAN SELECT ")
+        ):
+            raise ValueError("Only EXPLAIN SELECT statements are allowed.")
+        return operation, False
+
+    if operation in ADMIN_DB_WRITE_OPERATIONS:
+        if operation in {"UPDATE", "DELETE"} and " WHERE " not in f" {normalized_upper} ":
+            raise ValueError(f"{operation} statements must include a WHERE clause.")
+        if not allow_write:
+            raise PermissionError(
+                "This statement will change live data. Confirm the write in the owner workspace before running it."
+            )
+        return operation, True
+
+    raise ValueError(
+        "Only SELECT, EXPLAIN SELECT, safe PRAGMA statements, and confirmed INSERT/UPDATE/DELETE statements are supported."
+    )
+
+
+def _sanitize_database_rows(rows: list[dict]) -> list[dict]:
+    sanitized_rows = []
+    for row in rows:
+        sanitized_row = {}
+        for column_name, value in row.items():
+            normalized_name = str(column_name or "").strip().lower()
+            sanitized_row[column_name] = "[redacted]" if normalized_name in ADMIN_DB_REDACTED_COLUMNS else value
+        sanitized_rows.append(sanitized_row)
+    return sanitized_rows
+
+
+def _fetch_database_rows(result, *, limit: int = ADMIN_DB_QUERY_MAX_ROWS) -> tuple[list[str], list[dict], bool]:
+    columns = list(result.keys())
+    raw_rows = result.mappings().fetchmany(limit + 1)
+    truncated = len(raw_rows) > limit
+    rows = [dict(row) for row in raw_rows[:limit]]
+    return columns, _sanitize_database_rows(rows), truncated
+
+
+def _sqlite_storage_details() -> dict:
+    main_path = DATABASE_PATH
+    wal_path = Path(f"{DATABASE_PATH}-wal")
+    shm_path = Path(f"{DATABASE_PATH}-shm")
+    main_size = main_path.stat().st_size if main_path.exists() else 0
+    wal_size = wal_path.stat().st_size if wal_path.exists() else 0
+    shm_size = shm_path.stat().st_size if shm_path.exists() else 0
+    last_modified_at = None
+    if main_path.exists():
+        last_modified_at = datetime.fromtimestamp(main_path.stat().st_mtime).isoformat()
+    return {
+        "file_size_bytes": main_size,
+        "wal_size_bytes": wal_size,
+        "shm_size_bytes": shm_size,
+        "total_size_bytes": main_size + wal_size + shm_size,
+        "last_modified_at": last_modified_at,
+    }
+
+
+def _list_database_backups(limit: int = 6) -> list[dict]:
+    if not DATABASE_BACKUP_DIR.exists():
+        return []
+
+    backups = sorted(
+        (path for path in DATABASE_BACKUP_DIR.iterdir() if path.is_file()),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    backup_rows = []
+    for path in backups[:limit]:
+        stats = path.stat()
+        backup_rows.append(
+            {
+                "name": path.name,
+                "path": str(path),
+                "size_bytes": stats.st_size,
+                "created_at": datetime.fromtimestamp(stats.st_mtime).isoformat(),
+            }
+        )
+    return backup_rows
+
+
+def _count_database_backups() -> int:
+    if not DATABASE_BACKUP_DIR.exists():
+        return 0
+    return sum(1 for path in DATABASE_BACKUP_DIR.iterdir() if path.is_file())
+
+
+def _backup_sqlite_database(connection) -> dict:
+    if engine.dialect.name != "sqlite":
+        raise ValueError("Database backups from the owner workspace are available only for SQLite deployments.")
+
+    DATABASE_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    backup_path = DATABASE_BACKUP_DIR / f"swiftcart-backup-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}.db"
+
+    driver_connection = getattr(connection.connection, "driver_connection", None)
+    if driver_connection is None:
+        driver_connection = connection.connection.connection
+
+    with sqlite3.connect(str(backup_path)) as backup_connection:
+        driver_connection.backup(backup_connection)
+        backup_connection.commit()
+
+    stats = backup_path.stat()
+    return {
+        "name": backup_path.name,
+        "path": str(backup_path),
+        "size_bytes": stats.st_size,
+        "created_at": datetime.fromtimestamp(stats.st_mtime).isoformat(),
+    }
+
+
+def _run_database_maintenance(action: str) -> dict:
+    normalized_action = str(action or "").strip().lower()
+    if normalized_action not in {"backup", "integrity_check", "vacuum", "wal_checkpoint"}:
+        raise ValueError("Unsupported maintenance action.")
+
+    if normalized_action == "backup":
+        with engine.connect() as connection:
+            backup_row = _backup_sqlite_database(connection)
+        return {
+            "action": normalized_action,
+            "message": f"Database backup created: {backup_row['name']}",
+            "columns": ["name", "path", "size_bytes", "created_at"],
+            "rows": [backup_row],
+        }
+
+    if engine.dialect.name != "sqlite":
+        raise ValueError("This maintenance action is available only for SQLite deployments right now.")
+
+    with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as connection:
+        if normalized_action == "integrity_check":
+            result = connection.exec_driver_sql("PRAGMA integrity_check")
+            columns, rows, truncated = _fetch_database_rows(result, limit=20)
+            first_value = ""
+            if rows and columns:
+                first_value = str(rows[0].get(columns[0], "")).strip().lower()
+            return {
+                "action": normalized_action,
+                "message": "Database integrity check passed." if first_value == "ok" else "Database integrity check returned warnings.",
+                "columns": columns,
+                "rows": rows,
+                "truncated": truncated,
+            }
+
+        if normalized_action == "wal_checkpoint":
+            result = connection.exec_driver_sql("PRAGMA wal_checkpoint(TRUNCATE)")
+            columns, rows, truncated = _fetch_database_rows(result, limit=20)
+            return {
+                "action": normalized_action,
+                "message": "SQLite WAL checkpoint completed.",
+                "columns": columns,
+                "rows": rows,
+                "truncated": truncated,
+            }
+
+        connection.exec_driver_sql("VACUUM")
+        return {
+            "action": normalized_action,
+            "message": "SQLite VACUUM completed successfully.",
+            "columns": ["status"],
+            "rows": [{"status": "completed"}],
+            "truncated": False,
+        }
 
 
 def _matching_discount_products(session, category: Category, include_secondary: bool) -> list[Product]:
@@ -1363,11 +1599,28 @@ def admin_database_overview():
                 f'SELECT COUNT(*) FROM "{safe_name}"'
             ).scalar_one()
             tables.append({"name": table_name, "rows": count})
+        health = {
+            "engine": engine.dialect.name,
+            "foreign_keys_enabled": None,
+            "journal_mode": "",
+            "quick_check": "",
+        }
+        if engine.dialect.name == "sqlite":
+            health["foreign_keys_enabled"] = bool(connection.exec_driver_sql("PRAGMA foreign_keys").scalar_one())
+            health["journal_mode"] = str(connection.exec_driver_sql("PRAGMA journal_mode").scalar_one())
+            health["quick_check"] = str(connection.exec_driver_sql("PRAGMA quick_check").scalar_one())
+
+    storage = _sqlite_storage_details() if engine.dialect.name == "sqlite" else {}
+    backups = _list_database_backups()
 
     return jsonify(
         {
             "owner": owner_payload,
-            "database_path": str(DATABASE_PATH),
+            "database_path": str(DATABASE_PATH) if engine.dialect.name == "sqlite" else "Managed by PostgreSQL",
+            "health": health,
+            "storage": storage,
+            "backups": backups,
+            "backup_count": _count_database_backups(),
             "tables": tables,
         }
     )
@@ -1395,8 +1648,8 @@ def admin_database_table(table_name: str):
         result = connection.exec_driver_sql(
             f'SELECT * FROM "{safe_name}" LIMIT {limit}'
         )
-        rows = [dict(row) for row in result.mappings().all()]
-        columns = list(result.keys())
+        columns, rows, truncated = _fetch_database_rows(result, limit=limit)
+        redacted_columns = [column for column in columns if column.lower() in ADMIN_DB_REDACTED_COLUMNS]
 
     return jsonify(
         {
@@ -1405,6 +1658,8 @@ def admin_database_table(table_name: str):
             "limit": limit,
             "total_rows": count,
             "columns": columns,
+            "redacted_columns": redacted_columns,
+            "truncated": truncated,
             "rows": rows,
         }
     )
@@ -1413,6 +1668,7 @@ def admin_database_table(table_name: str):
 @products_bp.post("/admin/database/query")
 def admin_database_query():
     payload = request.get_json(silent=True) or {}
+    allow_write = bool(payload.get("allow_write"))
 
     with session_scope() as session:
         owner, error = _require_owner(session)
@@ -1422,35 +1678,70 @@ def admin_database_query():
 
     try:
         statement = _normalize_sql_statement(str(payload.get("sql", "")))
+        operation, is_write = _validate_admin_sql_statement(statement, allow_write=allow_write)
+    except PermissionError as error:
+        return jsonify({"message": str(error)}), 400
     except ValueError as error:
         return jsonify({"message": str(error)}), 400
 
-    operation = statement.split(None, 1)[0].upper()
+    try:
+        if is_write:
+            with engine.begin() as connection:
+                result = connection.exec_driver_sql(statement)
+                return jsonify(
+                    {
+                        "owner": owner_payload,
+                        "operation": operation,
+                        "columns": [],
+                        "rows": [],
+                        "affected_rows": result.rowcount if result.rowcount is not None else 0,
+                    }
+                )
 
-    with engine.begin() as connection:
-        result = connection.exec_driver_sql(statement)
-        if result.returns_rows:
-            rows = [dict(row) for row in result.mappings().all()]
-            columns = list(result.keys())
+        with engine.connect() as connection:
+            result = connection.exec_driver_sql(statement)
+            columns, rows, truncated = _fetch_database_rows(result, limit=ADMIN_DB_QUERY_MAX_ROWS)
+            redacted_columns = [column for column in columns if column.lower() in ADMIN_DB_REDACTED_COLUMNS]
             return jsonify(
                 {
                     "owner": owner_payload,
                     "operation": operation,
                     "columns": columns,
                     "rows": rows,
+                    "redacted_columns": redacted_columns,
+                    "returned_rows": len(rows),
                     "affected_rows": len(rows),
+                    "truncated": truncated,
+                    "max_rows": ADMIN_DB_QUERY_MAX_ROWS,
                 }
             )
+    except DBAPIError as error:
+        raw_message = getattr(error, "orig", error)
+        return jsonify({"message": f"Database query failed: {raw_message}"}), 400
 
-        return jsonify(
-            {
-                "owner": owner_payload,
-                "operation": operation,
-                "columns": [],
-                "rows": [],
-                "affected_rows": result.rowcount if result.rowcount is not None else 0,
-            }
-        )
+
+@products_bp.post("/admin/database/maintenance")
+def admin_database_maintenance():
+    payload = request.get_json(silent=True) or {}
+
+    with session_scope() as session:
+        owner, error = _require_owner(session)
+        if error:
+            return error
+        owner_payload = serialize_user(owner)
+
+    try:
+        result = _run_database_maintenance(str(payload.get("action", "")))
+    except ValueError as error:
+        return jsonify({"message": str(error)}), 400
+    except DBAPIError as error:
+        raw_message = getattr(error, "orig", error)
+        return jsonify({"message": f"Database maintenance failed: {raw_message}"}), 400
+    except sqlite3.Error as error:
+        return jsonify({"message": f"Database maintenance failed: {error}"}), 400
+
+    result["owner"] = owner_payload
+    return jsonify(result)
 
 
 @products_bp.get("/admin/products")
