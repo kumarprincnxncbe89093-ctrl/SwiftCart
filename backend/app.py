@@ -157,6 +157,16 @@ def create_app() -> Flask:
             payload["database_error"] = app.config["DB_INIT_ERROR"]
         return jsonify(payload), (200 if is_ready else 503)
 
+    @app.get("/healthz")
+    def live_health():
+        return jsonify(
+            {
+                "status": "ok",
+                "service": "SwiftCart API",
+                "database_ready": bool(app.config.get("DB_READY")),
+            }
+        ), 200
+
     @app.errorhandler(OperationalError)
     @app.errorhandler(DBAPIError)
     def handle_database_error(error):
