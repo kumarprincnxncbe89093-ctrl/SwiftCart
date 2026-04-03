@@ -18,6 +18,7 @@ from backend.routes.users import users_bp
 BASE_DIR = Path(__file__).resolve().parent.parent
 FRONTEND_DIR = BASE_DIR / "frontend"
 UPLOADS_DIR = FRONTEND_DIR / "uploads" / "profiles"
+DEFAULT_PUBLIC_SITE_URL = "https://www.swift-store.in"
 ALLOWED_ORIGINS = {
     origin.strip()
     for origin in os.getenv("ALLOWED_ORIGINS", "").split(",")
@@ -82,7 +83,7 @@ def create_app() -> Flask:
         configured = (
             os.getenv("PUBLIC_SITE_URL")
             or os.getenv("CANONICAL_BASE_URL")
-            or ""
+            or DEFAULT_PUBLIC_SITE_URL
         ).strip().rstrip("/")
         if not configured:
             return ""
