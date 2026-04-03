@@ -700,6 +700,15 @@ span{
     border:1px solid rgba(255,255,255,0.08);
 }
 
+.footer-bottom a{
+    color:#ddd;
+    text-decoration:none;
+}
+
+.footer-bottom a:hover{
+    text-decoration:underline;
+}
+
 .footer-inline-link{
     color:#ddd;
     text-decoration:none;

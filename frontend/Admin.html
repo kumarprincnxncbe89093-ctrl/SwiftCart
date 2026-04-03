@@ -166,8 +166,9 @@
         <p class="status-copy">Hold `Cmd` or `Ctrl` to pick extra categories for the same product.</p>
         <select name="secondary_categories" id="adminSecondaryCategoriesSelect" multiple size="4"></select>
         <div class="admin-upload-stack">
+          <input type="text" name="image" id="adminImageInput" placeholder="images/your-image.jpg or uploads/products/your-image.webp" required>
           <input type="file" id="adminImageFile" accept="image/png,image/jpeg,image/webp">
-          <input type="hidden" name="image" id="adminImageInput" required>
+          <p class="status-copy">Paste an image path like the merchant form, or upload a file to fill this automatically.</p>
           <p id="adminImageUploadStatus" class="status-copy"></p>
         </div>
         <div class="image-link-card">

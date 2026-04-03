@@ -837,9 +837,9 @@ function decorateSharedFooters() {
         </div>
         <div class="footer-col">
           <h4>CUSTOMER CARE</h4>
-          <p>Payments and checkout support</p>
-          <p>Cancellation and returns</p>
-          <p>Secure account and OTP access</p>
+          <a href="/contact">Payments and checkout support</a>
+          <a href="/contact">Cancellation and returns</a>
+          <a href="/contact">Secure account and OTP access</a>
         </div>
         <div class="footer-col">
           <h4>SELL ON SWIFTCART</h4>
@@ -849,15 +849,15 @@ function decorateSharedFooters() {
         </div>
         <div class="footer-col">
           <h4>DISCOVER</h4>
-          <p>Fashion and accessories</p>
-          <p>Curated marketplace collection</p>
-          <p>Deals, trends, and fresh arrivals</p>
+          <a href="/about">Fashion and accessories</a>
+          <a href="/about">Curated marketplace collection</a>
+          <a href="/privacy">Deals, trends, and fresh arrivals</a>
         </div>
         <div class="footer-col border-left">
           <h4>SWIFTCART HQ</h4>
           <p>Bengaluru, Karnataka, India</p>
-          <p>Customer-first marketplace experience</p>
-          <p>Secure shopping for buyers and merchants</p>
+          <a href="/about">Customer-first marketplace experience</a>
+          <a href="/privacy">Secure shopping for buyers and merchants</a>
         </div>
         <div class="footer-col footer-highlight">
           <h4>WHY SWIFTCART</h4>
@@ -870,7 +870,7 @@ function decorateSharedFooters() {
         <div><i class="fa-solid fa-store"></i><span>Marketplace Ready</span></div>
         <div><i class="fa-solid fa-shield-heart"></i><span>Secure Access</span></div>
         <div><i class="fa-solid fa-truck-fast"></i><span>Tracked Delivery</span></div>
-        <div><i class="fa-solid fa-headset"></i><span>Support Center</span></div>
+        <div><i class="fa-solid fa-headset"></i><a href="/contact">Support Center</a></div>
         <div><i class="fa-solid fa-sparkles"></i><span>SwiftCart AI</span></div>
         <div><span>© 2026 SwiftCart.com</span></div>
       </div>
@@ -4439,6 +4439,9 @@ async function renderAdminPage() {
         imagePreview.src = product.image;
         imagePreview.hidden = false;
       }
+      if (imageUploadStatus) {
+        setStatus(imageUploadStatus, "Using the saved product image. Paste a new image path or upload a replacement if needed.", "neutral");
+      }
       form.elements.price.value = product.price;
       form.elements.original_price.value = product.original_price;
       form.elements.stock.value = product.stock;
@@ -4593,6 +4596,7 @@ async function renderAdminPage() {
       if (!value) {
         imagePreview.hidden = true;
         imagePreview.removeAttribute("src");
+        if (imageUploadStatus) setStatus(imageUploadStatus, "", "neutral");
         return;
       }
       imagePreview.src = value;
@@ -4634,6 +4638,8 @@ async function renderAdminPage() {
         imagePreview.hidden = true;
         imagePreview.removeAttribute("src");
       }
+      if (imageFileInput) imageFileInput.value = "";
+      if (imageUploadStatus) setStatus(imageUploadStatus, "", "neutral");
       renderAdminPage();
     } catch (error) {
       setStatus(status, error.message, "error");
