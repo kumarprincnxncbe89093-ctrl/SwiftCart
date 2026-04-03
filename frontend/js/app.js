@@ -840,6 +840,7 @@ function decorateSharedFooters() {
           <a href="/contact">Payments and checkout support</a>
           <a href="/contact">Cancellation and returns</a>
           <a href="/contact">Secure account and OTP access</a>
+          <a href="/terms">Terms of Use</a>
         </div>
         <div class="footer-col">
           <h4>SELL ON SWIFTCART</h4>
@@ -871,6 +872,7 @@ function decorateSharedFooters() {
         <div><i class="fa-solid fa-shield-heart"></i><span>Secure Access</span></div>
         <div><i class="fa-solid fa-truck-fast"></i><span>Tracked Delivery</span></div>
         <div><i class="fa-solid fa-headset"></i><a href="/contact">Support Center</a></div>
+        <div><i class="fa-solid fa-file-contract"></i><a href="/terms">Terms</a></div>
         <div><i class="fa-solid fa-sparkles"></i><span>SwiftCart AI</span></div>
         <div><span>© 2026 SwiftCart.com</span></div>
       </div>

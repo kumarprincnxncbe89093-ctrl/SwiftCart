@@ -267,6 +267,10 @@ def create_app() -> Flask:
     def checkout_page():
         return serve_frontend_page("Payment.html")
 
+    @app.get("/terms")
+    def terms_page():
+        return serve_frontend_page("terms.html")
+
     @app.get("/owner-workspace")
     def owner_workspace_page():
         return serve_frontend_page("Admin.html")
