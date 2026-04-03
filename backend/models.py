@@ -159,11 +159,14 @@ def _resolve_database_url() -> str:
 DATABASE_URL = _ensure_postgres_sslmode(_resolve_database_url())
 OWNER_EMAIL = (os.getenv("OWNER_EMAIL") or "owner@demo.com").strip().lower()
 OWNER_PASSWORD = (os.getenv("OWNER_PASSWORD") or "123456").strip()
+DEMO_OWNER_EMAIL = (os.getenv("DEMO_OWNER_EMAIL") or "owner@demo.com").strip().lower()
+DEMO_OWNER_PASSWORD = (os.getenv("DEMO_OWNER_PASSWORD") or "123456").strip()
 MERCHANT_DEMO_EMAIL = (os.getenv("MERCHANT_DEMO_EMAIL") or "merchant@demo.com").strip().lower()
 MERCHANT_DEMO_PASSWORD = (os.getenv("MERCHANT_DEMO_PASSWORD") or "123456").strip()
 BUYER_DEMO_EMAIL = (os.getenv("BUYER_DEMO_EMAIL") or "user@demo.com").strip().lower()
 BUYER_DEMO_PASSWORD = (os.getenv("BUYER_DEMO_PASSWORD") or "123456").strip()
 ENABLE_DEMO_MERCHANT = _env_flag("ENABLE_DEMO_MERCHANT", True)
+ENABLE_DEMO_LOGINS = _env_flag("ENABLE_DEMO_LOGINS", True)
 ROTATE_SEEDED_PASSWORDS = _env_flag("ROTATE_SEEDED_PASSWORDS", False)
 BCRYPT_ROUNDS = max(_env_int("BCRYPT_ROUNDS", 10), 4)
 
@@ -729,6 +732,7 @@ def init_db() -> None:
     ensure_schema_updates()
     seed_data()
     ensure_owner_account()
+    ensure_demo_owner_account()
     ensure_merchant_demo_account()
     if _should_sync_imported_gallery_products_on_startup():
         sync_imported_gallery_products()
@@ -1655,8 +1659,54 @@ def ensure_owner_account() -> None:
         )
 
 
+def ensure_demo_owner_account() -> None:
+    if not ENABLE_DEMO_LOGINS or not DEMO_OWNER_EMAIL or not DEMO_OWNER_PASSWORD:
+        return
+
+    with session_scope() as session:
+        owner = session.query(User).filter(User.email == DEMO_OWNER_EMAIL).first()
+        if owner:
+            owner.account_type = "owner"
+            owner.shop_name = owner.shop_name or "SwiftCart Demo Owner"
+            owner.gstin = owner.gstin or "29DEMOOWNER0X1Z1"
+            if not owner.unique_code:
+                owner.unique_code = generate_unique_code(session)
+            if ROTATE_SEEDED_PASSWORDS or not verify_password(owner.password_hash, DEMO_OWNER_PASSWORD):
+                owner.password_hash = hash_password(DEMO_OWNER_PASSWORD)
+                owner.password_changed_at = datetime.utcnow()
+        else:
+            owner = User(
+                first_name="Demo",
+                last_name="Owner",
+                email=DEMO_OWNER_EMAIL,
+                mobile="+919900000001",
+                password_hash=hash_password(DEMO_OWNER_PASSWORD),
+                unique_code=generate_unique_code(session),
+                account_type="owner",
+                shop_name="SwiftCart Demo Owner",
+                gstin="29DEMOOWNER0X1Z1",
+                password_changed_at=datetime.utcnow(),
+            )
+            session.add(owner)
+            session.flush()
+
+        if not owner.addresses:
+            session.add(
+                Address(
+                    user_id=owner.id,
+                    label="HQ",
+                    street="Demo Owner Desk, Bengaluru",
+                    city="Bengaluru",
+                    state="Karnataka",
+                    pincode="560001",
+                    landmark="Owner operations demo desk",
+                    is_default=True,
+                )
+            )
+
+
 def ensure_merchant_demo_account() -> None:
-    if not ENABLE_DEMO_MERCHANT or not MERCHANT_DEMO_PASSWORD:
+    if not ENABLE_DEMO_LOGINS or not MERCHANT_DEMO_PASSWORD:
         return
     with session_scope() as session:
         merchant = session.query(User).filter(User.email == MERCHANT_DEMO_EMAIL).first()
