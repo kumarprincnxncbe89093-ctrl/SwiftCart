@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 
 
 def create_app() -> Flask:
-    app = Flask(__name__, static_folder=str(FRONTEND_DIR), static_url_path="")
+    app = Flask(__name__, static_folder=None)
     app.config["JSON_SORT_KEYS"] = False
     app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
     app.config["ENV_NAME"] = os.getenv("FLASK_ENV", "production")
@@ -169,6 +169,30 @@ def create_app() -> Flask:
             }
         ), 200
 
+    @app.get("/api/site-profile")
+    def site_profile():
+        support_email = (os.getenv("PUBLIC_SUPPORT_EMAIL") or "").strip()
+        if support_email.lower().endswith("@demo.com"):
+            support_email = ""
+        support_phone = (os.getenv("PUBLIC_SUPPORT_PHONE") or "").strip()
+        business_address = (
+            os.getenv("PUBLIC_BUSINESS_ADDRESS") or "Bengaluru, Karnataka, India"
+        ).strip()
+        support_hours = (
+            os.getenv("PUBLIC_SUPPORT_HOURS") or "Monday to Saturday, 10:00 AM to 6:00 PM IST"
+        ).strip()
+        legal_name = (os.getenv("PUBLIC_LEGAL_NAME") or "SwiftCart").strip()
+        return jsonify(
+            {
+                "brand_name": "SwiftCart",
+                "legal_name": legal_name,
+                "support_email": support_email,
+                "support_phone": support_phone,
+                "business_address": business_address,
+                "support_hours": support_hours,
+            }
+        )
+
     @app.errorhandler(OperationalError)
     @app.errorhandler(DBAPIError)
     def handle_database_error(error):
@@ -177,24 +201,39 @@ def create_app() -> Flask:
             return database_unavailable_response()
         return send_from_directory(FRONTEND_DIR, "index.html")
 
+    def serve_frontend_page(filename: str):
+        return send_from_directory(FRONTEND_DIR, filename)
+
     @app.get("/")
     def root():
-        return send_from_directory(FRONTEND_DIR, "index.html")
+        return serve_frontend_page("index.html")
+
+    @app.get("/login")
+    def login_page():
+        return serve_frontend_page("Login.html")
+
+    @app.get("/register")
+    def register_page():
+        return serve_frontend_page("Account_Creation.html")
 
     @app.get("/checkout")
     def checkout_page():
-        return send_from_directory(FRONTEND_DIR, "Payment.html")
+        return serve_frontend_page("Payment.html")
 
     @app.get("/owner-workspace")
     def owner_workspace_page():
-        return send_from_directory(FRONTEND_DIR, "Admin.html")
+        return serve_frontend_page("Admin.html")
 
     @app.get("/<path:filename>")
     def frontend_files(filename: str):
-        target = FRONTEND_DIR / filename
-        if target.exists():
-            return send_from_directory(FRONTEND_DIR, filename)
-        return send_from_directory(FRONTEND_DIR, "index.html")
+        candidate_files = [filename]
+        if "." not in Path(filename).name:
+            candidate_files.append(f"{filename}.html")
+        for candidate in candidate_files:
+            target = FRONTEND_DIR / candidate
+            if target.exists() and target.is_file():
+                return send_from_directory(FRONTEND_DIR, candidate)
+        return serve_frontend_page("index.html")
 
     return app
 

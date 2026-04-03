@@ -24,6 +24,8 @@ BASE_DIR = Path(__file__).resolve().parent
 DATABASE_PATH = BASE_DIR / "database.db"
 DEFAULT_SQLITE_URL = f"sqlite:///{DATABASE_PATH}"
 logger = logging.getLogger(__name__)
+ENV_NAME = (os.getenv("FLASK_ENV") or "development").strip().lower()
+IS_PRODUCTION = ENV_NAME == "production"
 
 
 def _env_int(name: str, default: int) -> int:
@@ -38,6 +40,10 @@ def _env_int(name: str, default: int) -> int:
 def _env_flag(name: str, default: bool = False) -> bool:
     raw_value = str(os.getenv(name, "1" if default else "0")).strip().lower()
     return raw_value in {"1", "true", "yes", "on"}
+
+
+def _default_seed_value(value: str) -> str:
+    return "" if IS_PRODUCTION else value
 
 
 def _normalize_database_url(raw_url: str | None) -> str:
@@ -157,16 +163,16 @@ def _resolve_database_url() -> str:
 
 
 DATABASE_URL = _ensure_postgres_sslmode(_resolve_database_url())
-OWNER_EMAIL = (os.getenv("OWNER_EMAIL") or "owner@demo.com").strip().lower()
-OWNER_PASSWORD = (os.getenv("OWNER_PASSWORD") or "123456").strip()
-DEMO_OWNER_EMAIL = (os.getenv("DEMO_OWNER_EMAIL") or "owner@demo.com").strip().lower()
-DEMO_OWNER_PASSWORD = (os.getenv("DEMO_OWNER_PASSWORD") or "123456").strip()
-MERCHANT_DEMO_EMAIL = (os.getenv("MERCHANT_DEMO_EMAIL") or "merchant@demo.com").strip().lower()
-MERCHANT_DEMO_PASSWORD = (os.getenv("MERCHANT_DEMO_PASSWORD") or "123456").strip()
-BUYER_DEMO_EMAIL = (os.getenv("BUYER_DEMO_EMAIL") or "user@demo.com").strip().lower()
-BUYER_DEMO_PASSWORD = (os.getenv("BUYER_DEMO_PASSWORD") or "123456").strip()
-ENABLE_DEMO_MERCHANT = _env_flag("ENABLE_DEMO_MERCHANT", True)
-ENABLE_DEMO_LOGINS = _env_flag("ENABLE_DEMO_LOGINS", True)
+OWNER_EMAIL = (os.getenv("OWNER_EMAIL") or _default_seed_value("owner@demo.com")).strip().lower()
+OWNER_PASSWORD = (os.getenv("OWNER_PASSWORD") or _default_seed_value("123456")).strip()
+DEMO_OWNER_EMAIL = (os.getenv("DEMO_OWNER_EMAIL") or _default_seed_value("owner@demo.com")).strip().lower()
+DEMO_OWNER_PASSWORD = (os.getenv("DEMO_OWNER_PASSWORD") or _default_seed_value("123456")).strip()
+MERCHANT_DEMO_EMAIL = (os.getenv("MERCHANT_DEMO_EMAIL") or _default_seed_value("merchant@demo.com")).strip().lower()
+MERCHANT_DEMO_PASSWORD = (os.getenv("MERCHANT_DEMO_PASSWORD") or _default_seed_value("123456")).strip()
+BUYER_DEMO_EMAIL = (os.getenv("BUYER_DEMO_EMAIL") or _default_seed_value("user@demo.com")).strip().lower()
+BUYER_DEMO_PASSWORD = (os.getenv("BUYER_DEMO_PASSWORD") or _default_seed_value("123456")).strip()
+ENABLE_DEMO_MERCHANT = _env_flag("ENABLE_DEMO_MERCHANT", not IS_PRODUCTION)
+ENABLE_DEMO_LOGINS = _env_flag("ENABLE_DEMO_LOGINS", not IS_PRODUCTION)
 ROTATE_SEEDED_PASSWORDS = _env_flag("ROTATE_SEEDED_PASSWORDS", False)
 BCRYPT_ROUNDS = max(_env_int("BCRYPT_ROUNDS", 10), 4)
 

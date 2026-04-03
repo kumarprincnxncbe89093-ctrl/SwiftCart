@@ -584,8 +584,21 @@ span{
     color:#ddd;
 }
 
-.footer-col p:hover{
+.footer-col a{
+    display:block;
+    font-size:13px;
+    margin:6px 0;
+    color:#ddd;
+    text-decoration:none;
+}
+
+.footer-col p:hover,
+.footer-col a:hover{
     text-decoration:underline;
+}
+
+.footer-link{
+    font-weight:500;
 }
 
 .border-left{
@@ -598,6 +611,15 @@ span{
     border-radius:22px;
     background:rgba(255,255,255,0.05);
     border:1px solid rgba(255,255,255,0.08);
+}
+
+.footer-highlight p{
+    cursor:default;
+    line-height:1.65;
+}
+
+.footer-highlight p:hover{
+    text-decoration:none;
 }
 
 /* SOCIAL */
@@ -676,6 +698,15 @@ span{
     border-radius:999px;
     background:rgba(255,255,255,0.05);
     border:1px solid rgba(255,255,255,0.08);
+}
+
+.footer-inline-link{
+    color:#ddd;
+    text-decoration:none;
+}
+
+.footer-inline-link:hover{
+    text-decoration:underline;
 }
 .not-found{
     display:flex;

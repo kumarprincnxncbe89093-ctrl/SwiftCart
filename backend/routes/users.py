@@ -15,6 +15,7 @@ from backend.auth import create_auth_token, require_authenticated_user
 from backend.models import (
     Address,
     BASE_DIR,
+    ENABLE_DEMO_LOGINS,
     OtpCode,
     OWNER_EMAIL,
     OWNER_PASSWORD,
@@ -42,6 +43,12 @@ ALLOWED_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
 CAPTCHA_TTL_SECONDS = 300
 CAPTCHA_SALT = "swiftcart-captcha"
 OTP_PREVIEW_OVERRIDE = os.getenv("SWIFTCART_EXPOSE_OTP_PREVIEW")
+LEGACY_DEMO_LOGIN_EMAILS = {
+    "owner@demo.com",
+    "merchant@demo.com",
+    "user@demo.com",
+    "demo@swiftcart.com",
+}
 
 
 def _title_case(value: str) -> str:
@@ -274,13 +281,19 @@ def _normalize_login_identifier(value: str) -> str:
     return str(value or "").strip()
 
 
+def _is_disabled_demo_account_email(value: str) -> bool:
+    if ENABLE_DEMO_LOGINS:
+        return False
+    return str(value or "").strip().lower() in LEGACY_DEMO_LOGIN_EMAILS
+
+
 def _find_user_by_login_identifier(session, identifier: str) -> User | None:
     normalized = _normalize_login_identifier(identifier)
     if not normalized:
         return None
 
     normalized_lower = normalized.lower()
-    return (
+    user = (
         session.query(User)
         .filter(
             or_(
@@ -291,6 +304,9 @@ def _find_user_by_login_identifier(session, identifier: str) -> User | None:
         .order_by(User.created_at.asc())
         .first()
     )
+    if user and _is_disabled_demo_account_email(user.email):
+        return None
+    return user
 
 
 def _mobile_variants(value: str) -> list[str]:
@@ -311,6 +327,8 @@ def _find_users_by_mobile(session, mobile: str) -> list[User]:
     for variant in variants:
         matched = session.query(User).filter(User.mobile == variant).order_by(User.created_at.asc()).all()
         for user in matched:
+            if _is_disabled_demo_account_email(user.email):
+                continue
             if all(existing.id != user.id for existing in users):
                 users.append(user)
     return users

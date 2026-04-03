@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Create Account - SwiftCart</title>
+<meta name="description" content="Create a SwiftCart marketplace account with OTP verification, shopper or merchant access, and public privacy and contact information.">
 <link rel="icon" type="image/svg+xml" href="images/swiftcart-favicon.svg">
 <link rel="stylesheet" href="css/Login.css?v=20260402-1815">
 <link rel="stylesheet" href="css/Account_Creation.css?v=20260402-1815">
@@ -12,9 +13,15 @@
 
 <div class="container">
     <section class="login-showcase register-showcase">
-        <p class="login-chip">Create Your Access</p>
-        <h1>Join SwiftCart with a cleaner, more trusted signup flow.</h1>
-        <p class="sub">The signup experience now mirrors the stronger login layout, with clearer role selection, identity proof, and confidence-building cues.</p>
+        <div class="brand-row">
+            <img class="brand-logo" src="images/swiftcart-favicon.svg" alt="SwiftCart logo">
+            <div>
+                <p class="login-chip">Create Your Access</p>
+                <p class="brand-copy">Official SwiftCart registration for marketplace shoppers and merchants.</p>
+            </div>
+        </div>
+        <h1>Join SwiftCart with a verified and more transparent signup flow.</h1>
+        <p class="sub">The account creation experience mirrors the secure login layout, adds OTP verification, and publishes public support and privacy links before you submit personal details.</p>
         <div class="login-benefits">
             <article>
                 <strong>Verified onboarding</strong>
@@ -43,7 +50,7 @@
         <p class="extra">Create a marketplace profile for shopping, order tracking, faster checkout, and seller access when needed.</p>
     </div>
 
-    <form id="registerForm" autocomplete="off">
+    <form id="registerForm" autocomplete="on">
         <div class="account-type-panel">
             <label class="account-type-card">
                 <input type="radio" name="account_type" value="buyer" checked>
@@ -157,12 +164,19 @@
         <p id="registerStatus" class="status-copy"></p>
     </form>
 
+    <div class="auth-legal-row">
+        <a href="/about">About SwiftCart</a>
+        <a href="/contact">Contact</a>
+        <a href="/privacy">Privacy Policy</a>
+    </div>
+    <p class="register-note">SwiftCart only uses this form for marketplace account creation. We do not ask for banking PINs, debit card CVVs, or net-banking passwords here.</p>
     <p class="extra">Already have an account? <a href="Login.html">Login</a></p>
     </div>
 </div>
 
 <script src="js/products.js?v=20260402-1815"></script>
 <script src="js/app.js?v=20260402-1815"></script>
+<script src="js/site-info.js?v=20260403-1000"></script>
 
 </body>
 </html>

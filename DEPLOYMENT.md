@@ -84,16 +84,21 @@ Security-focused production settings:
 ALLOWED_ORIGINS=https://your-domain.com
 OWNER_EMAIL=owner@your-domain.com
 OWNER_PASSWORD=set-a-unique-long-password
+ENABLE_DEMO_LOGINS=0
 ENABLE_DEMO_MERCHANT=0
 ROTATE_SEEDED_PASSWORDS=0
 AUTH_TOKEN_MAX_AGE_SECONDS=604800
+PUBLIC_SUPPORT_EMAIL=support@your-domain.com
+PUBLIC_BUSINESS_ADDRESS=Your registered business address
 ```
 
 Notes:
 
 - Do not keep hardcoded owner or demo passwords in code or Railway variables screenshots.
+- Set `ENABLE_DEMO_LOGINS=0` on Railway so demo-style seeded accounts are not available on public deployments.
 - Keep `ENABLE_DEMO_MERCHANT=0` unless you intentionally want a demo seller account.
 - `SWIFTCART_EXPOSE_OTP_PREVIEW=1` forces OTP preview responses for testing. Localhost and private-network hosting now show OTP previews automatically even if you run with production-like settings.
+- Publish a real support email, business address, and custom domain before asking users to trust the login flow.
 - SwiftCart now uses signed auth tokens for protected API routes, so users must log in again after deployment if they had an old local session stored in the browser.
 
 ## 6. Initialize the app once

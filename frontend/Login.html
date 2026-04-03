@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Login - SwiftCart</title>
+<title>Secure Login - SwiftCart</title>
+<meta name="description" content="Official SwiftCart login for shoppers, merchants, and owners. Use your SwiftCart email, user code, password, or verified OTP to sign in securely.">
 <link rel="icon" type="image/svg+xml" href="images/swiftcart-favicon.svg">
 <link rel="stylesheet" href="css/Login.css?v=20260402-1815">
 </head>
@@ -11,37 +12,59 @@
 
 <div class="container">
     <section class="login-showcase">
-        <p class="login-chip">Marketplace Access</p>
-        <h1>Sign in to SwiftCart with a cleaner, trusted login flow.</h1>
-        <p class="sub">A sharper layout, stronger identity checks, and better recovery options help shoppers log in with less friction.</p>
+        <div class="brand-row">
+            <img class="brand-logo" src="images/swiftcart-favicon.svg" alt="SwiftCart logo">
+            <div>
+                <p class="login-chip">Official SwiftCart Account</p>
+                <p class="brand-copy">Independent marketplace access for shoppers, merchants, and owners.</p>
+            </div>
+        </div>
+        <h1>Sign in to the official SwiftCart marketplace.</h1>
+        <p class="sub">Use this page only for your SwiftCart email, user code, password, or one-time password. SwiftCart does not ask for card CVVs, UPI PINs, or banking passwords on the login screen.</p>
         <div class="login-benefits">
             <article>
-                <strong>Secure identity</strong>
-                <span>Password and OTP options with account-aware login.</span>
+                <strong>Recognizable SwiftCart branding</strong>
+                <span>Dedicated account access with a distinct SwiftCart identity instead of copied marketplace UI.</span>
             </article>
             <article>
-                <strong>Cleaner account access</strong>
-                <span>Buyer, merchant, and returning customer flows are handled in one place.</span>
+                <strong>Protected account access</strong>
+                <span>Password sign-in, OTP access, and recovery checks are grouped in one verified flow.</span>
             </article>
             <article>
-                <strong>Mobile linked accounts</strong>
-                <span>OTP login can surface multiple accounts tied to one number.</span>
+                <strong>Public trust pages</strong>
+                <span>About, contact, and privacy information are published so visitors can verify who operates SwiftCart.</span>
             </article>
+        </div>
+        <div class="page-trust-badges">
+            <span>Independent ecommerce project</span>
+            <span>OTP and password sign-in</span>
+            <span>Published privacy policy</span>
         </div>
     </section>
     <div class="login-box">
         <div class="auth-head">
             <p class="login-chip">SwiftCart Access</p>
             <h2>Welcome Back</h2>
-            <p class="sub">Sign in with your email and password first, or use OTP when needed.</p>
+            <p class="sub">Secure access for SwiftCart accounts with clear recovery options and public support links.</p>
+        </div>
+
+        <div class="auth-trust-strip" aria-label="SwiftCart trust signals">
+            <article class="auth-trust-card">
+                <strong>Official SwiftCart sign-in</strong>
+                <span>This login page is only for SwiftCart marketplace credentials and verified one-time passwords.</span>
+            </article>
+            <article class="auth-trust-card">
+                <strong>Support and policy pages are public</strong>
+                <span>Review <a href="/about">About SwiftCart</a>, <a href="/contact">Contact</a>, and the <a href="/privacy">Privacy Policy</a> before signing in.</span>
+            </article>
         </div>
 
         <section class="auth-section">
             <div class="auth-section-head">
-                <h3>Email Login</h3>
+                <h3>Password Sign-In</h3>
                 <p>Use your registered email address or your SwiftCart user code with your password.</p>
             </div>
-            <form id="loginForm" class="auth-form" autocomplete="off">
+            <form id="loginForm" class="auth-form" method="post" action="/api/auth/login" accept-charset="UTF-8" autocomplete="on">
                 <label class="auth-field">
                     <span>Email Address or User Code</span>
                     <input type="text" name="email" id="loginEmail" required autocomplete="username" placeholder="Enter your email or 10-digit user code">
@@ -71,7 +94,7 @@
                     </label>
                 </div>
 
-                <button class="btn" type="submit">Login</button>
+                <button class="btn" type="submit">Secure Login</button>
                 <p id="loginStatus" class="status-copy"></p>
             </form>
             <div class="auth-links-row">
@@ -140,11 +163,22 @@
                 <p id="recoveryStatus" class="status-copy"></p>
             </div>
         </section>
+
+        <div class="login-footer">
+            <p class="login-note">SwiftCart is an independent ecommerce project based in <span data-site-business-address>Bengaluru, Karnataka, India</span>. It is not affiliated with Amazon, Flipkart, or third-party brands referenced in the product catalog.</p>
+            <div class="legal-links" aria-label="SwiftCart public policies">
+                <a href="/">Home</a>
+                <a href="/about">About</a>
+                <a href="/contact">Contact</a>
+                <a href="/privacy">Privacy Policy</a>
+            </div>
+        </div>
     </div>
 </div>
 
 <script src="js/products.js?v=20260402-1815"></script>
 <script src="js/app.js?v=20260402-1815"></script>
+<script src="js/site-info.js?v=20260403-1000"></script>
 
 </body>
 </html>

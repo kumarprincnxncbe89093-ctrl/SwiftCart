@@ -370,6 +370,47 @@ body[data-page="login"] .auth-head{
     margin-bottom:4px;
 }
 
+body[data-page="login"] .brand-row,
+body[data-page="register"] .brand-row{
+    display:flex;
+    align-items:center;
+    gap:14px;
+}
+
+.brand-logo{
+    width:54px;
+    height:54px;
+    padding:10px;
+    border-radius:18px;
+    background:rgba(255,255,255,0.14);
+    border:1px solid rgba(255,255,255,0.18);
+    box-shadow:0 16px 32px rgba(15,23,42,0.18);
+}
+
+.brand-copy{
+    color:rgba(226,232,240,0.82);
+    font-size:0.92rem;
+    line-height:1.6;
+}
+
+.page-trust-badges{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+}
+
+.page-trust-badges span{
+    display:inline-flex;
+    align-items:center;
+    width:auto;
+    padding:10px 14px;
+    border-radius:999px;
+    background:rgba(255,255,255,0.1);
+    border:1px solid rgba(255,255,255,0.14);
+    color:#e2e8f0;
+    font-size:0.84rem;
+}
+
 body[data-page="login"] .auth-head h2{
     margin:0;
     text-align:left;
@@ -382,6 +423,48 @@ body[data-page="login"] .auth-head .sub{
     text-align:left;
     color:rgba(226,232,240,0.88);
     line-height:1.6;
+}
+
+body[data-page="login"] .auth-trust-strip{
+    display:grid;
+    gap:10px;
+}
+
+body[data-page="login"] .auth-trust-card{
+    display:grid;
+    gap:6px;
+    padding:14px 16px;
+    border-radius:18px;
+    background:rgba(255,255,255,0.05);
+    border:1px solid rgba(148,163,184,0.2);
+}
+
+body[data-page="login"] .auth-trust-card strong{
+    color:#fff;
+    font-size:0.95rem;
+}
+
+body[data-page="login"] .auth-trust-card span{
+    width:auto;
+    color:#cbd5e1;
+    font-size:0.88rem;
+    line-height:1.6;
+}
+
+body[data-page="login"] .auth-trust-card a,
+body[data-page="login"] .legal-links a,
+body[data-page="register"] .auth-legal-row a,
+body[data-page="register"] .extra a{
+    color:#fef3c7;
+    text-decoration:none;
+    font-weight:600;
+}
+
+body[data-page="login"] .auth-trust-card a:hover,
+body[data-page="login"] .legal-links a:hover,
+body[data-page="register"] .auth-legal-row a:hover,
+body[data-page="register"] .extra a:hover{
+    text-decoration:underline;
 }
 
 body[data-page="login"] .auth-section{
@@ -583,6 +666,26 @@ body[data-page="login"] #recoveryPanel[hidden]{
     display:none !important;
 }
 
+body[data-page="login"] .login-footer{
+    display:grid;
+    gap:12px;
+    padding:4px 4px 0;
+}
+
+body[data-page="login"] .login-note,
+body[data-page="register"] .register-note{
+    color:#cbd5e1;
+    font-size:0.88rem;
+    line-height:1.68;
+}
+
+body[data-page="login"] .legal-links,
+body[data-page="register"] .auth-legal-row{
+    display:flex;
+    flex-wrap:wrap;
+    gap:12px 18px;
+}
+
 body[data-page="login"] .signup-cta-button{
     display:inline-flex;
     align-items:center;
@@ -624,6 +727,14 @@ body[data-page="login"] .status-copy[data-state="error"]{
 body[data-page="login"] .extra{
     margin:0;
     text-align:left;
+}
+
+body[data-page="register"] .auth-legal-row{
+    margin:12px 0 4px;
+}
+
+body[data-page="register"] .register-note{
+    margin:0 0 12px;
 }
 
 body[data-page="login"] .input-box,
