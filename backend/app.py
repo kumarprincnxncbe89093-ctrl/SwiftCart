@@ -75,8 +75,18 @@ def create_app() -> Flask:
             )
         ).strip().lower() in {"1", "true", "yes", "on"}
 
+    def normalized_host(hostname: str) -> str:
+        host = (hostname or "").strip().lower().rstrip(".")
+        if not host:
+            return ""
+        if host.startswith("["):
+            return host
+        if ":" in host and host.count(":") == 1:
+            return host.split(":", 1)[0]
+        return host
+
     def is_local_host(hostname: str) -> bool:
-        host = hostname.split(":", 1)[0].strip().lower()
+        host = normalized_host(hostname)
         return host in {"127.0.0.1", "localhost"} or host.endswith(".local")
 
     def canonical_origin() -> str:
@@ -95,7 +105,18 @@ def create_app() -> Flask:
         origin = canonical_origin()
         if not origin:
             return ""
-        return urlsplit(origin).netloc.strip().lower()
+        return normalized_host(urlsplit(origin).netloc)
+
+    def accepted_public_hosts() -> set[str]:
+        host = canonical_host()
+        if not host:
+            return set()
+        hosts = {host}
+        if host.startswith("www."):
+            hosts.add(host[4:])
+        else:
+            hosts.add(f"www.{host}")
+        return {value for value in hosts if value}
 
     def database_unavailable_response():
         message = "SwiftCart cannot reach the database right now. Please try again shortly."
@@ -130,8 +151,13 @@ def create_app() -> Flask:
             return None
         target_origin = canonical_origin()
         target_host = canonical_host()
-        current_host = request.host.strip().lower()
-        if not target_origin or not target_host or is_local_host(current_host) or current_host == target_host:
+        current_host = normalized_host(request.host)
+        if (
+            not target_origin
+            or not target_host
+            or is_local_host(current_host)
+            or current_host in accepted_public_hosts()
+        ):
             return None
         target_parts = urlsplit(target_origin)
         redirect_url = urlunsplit(
@@ -177,7 +203,7 @@ def create_app() -> Flask:
         forwarded_proto = request.headers.get("X-Forwarded-Proto", "")
         if request.is_secure or "https" in forwarded_proto.lower():
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-        if request.host.endswith(".up.railway.app"):
+        if normalized_host(request.host).endswith(".up.railway.app"):
             response.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive"
         canonical = canonical_origin()
         if canonical and not request.path.startswith("/api") and response.mimetype == "text/html":
