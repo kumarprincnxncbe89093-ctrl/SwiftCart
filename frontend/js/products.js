@@ -1,4 +1,4 @@
-const RAILWAY_API_ORIGIN = "https://web-production-00035.up.railway.app";
+const RAILWAY_API_ORIGIN = "https://intuitive-embrace-production-4ac0.up.railway.app";
 const API_BASE = new URL(
   "/api",
   window.location.protocol === "file:" ? RAILWAY_API_ORIGIN : window.location.origin
