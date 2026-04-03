@@ -96,6 +96,8 @@ def create_app() -> Flask:
     def redirect_http_to_https():
         forwarded_proto = request.headers.get("X-Forwarded-Proto", "")
         already_secure = request.is_secure or "https" in forwarded_proto.lower()
+        if request.path in {"/healthz", "/api/health"}:
+            return None
         if already_secure or not should_force_https() or is_local_host(request.host):
             return None
         secure_url = request.url.replace("http://", "https://", 1)
