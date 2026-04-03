@@ -110,6 +110,8 @@ def _looks_like_placeholder_database_url(url: str) -> bool:
     placeholder_tokens = ("user", "password", "host", "dbname")
     if all(token in lowered for token in placeholder_tokens):
         return True
+    if "reference to" in lowered and ("database_url" in lowered or "postgres" in lowered):
+        return True
     return (
         url.startswith("${{")
         or url.startswith("{{")
