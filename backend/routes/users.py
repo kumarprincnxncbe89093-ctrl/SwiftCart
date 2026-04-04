@@ -157,38 +157,23 @@ def _repair_or_bootstrap_owner_account(session, email: str, password: str) -> Us
         .first()
     )
 
-    if owner is None:
-        owner = User(
-            first_name="Prince",
-            last_name="Kumar",
-            email=normalized_owner_email,
-            mobile="+910000000000",
-            password_hash=hash_password(configured_owner_password),
-            unique_code=generate_unique_code(session),
-            account_type="owner",
-            shop_name="SwiftCart Marketplace",
-            gstin="29OWNER0000X1Z0",
-            password_changed_at=datetime.utcnow(),
-        )
-        session.add(owner)
-        session.flush()
-    else:
-        owner.account_type = "owner"
-        owner.email = normalized_owner_email
-        owner.password_hash = hash_password(configured_owner_password)
-        owner.password_changed_at = datetime.utcnow()
-        if not owner.first_name:
-            owner.first_name = "Prince"
-        if not owner.last_name:
-            owner.last_name = "Kumar"
-        if not owner.mobile:
-            owner.mobile = "+910000000000"
-        if not owner.unique_code:
-            owner.unique_code = generate_unique_code(session)
-        if not owner.shop_name:
-            owner.shop_name = "SwiftCart Marketplace"
-        if not owner.gstin:
-            owner.gstin = "29OWNER0000X1Z0"
+    if owner is not None:
+        return None
+
+    owner = User(
+        first_name="Prince",
+        last_name="Kumar",
+        email=normalized_owner_email,
+        mobile="+910000000000",
+        password_hash=hash_password(configured_owner_password),
+        unique_code=generate_unique_code(session),
+        account_type="owner",
+        shop_name="SwiftCart Marketplace",
+        gstin="29OWNER0000X1Z0",
+        password_changed_at=datetime.utcnow(),
+    )
+    session.add(owner)
+    session.flush()
 
     if not owner.addresses:
         session.add(
@@ -217,6 +202,8 @@ def _sync_owner_credentials_if_needed(session, user: User, password: str) -> boo
     if password != configured_owner_password:
         return False
     if str(user.account_type or "").strip().lower() != "owner" and str(user.email or "").strip().lower() != normalized_owner_email:
+        return False
+    if str(user.password_hash or "").strip():
         return False
     if normalized_owner_email and str(user.email or "").strip().lower() != normalized_owner_email:
         user.email = normalized_owner_email

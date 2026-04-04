@@ -3424,13 +3424,21 @@ async function renderMerchantPage() {
   const tableNode = document.getElementById("merchantProductTable");
   const merchantNode = document.getElementById("merchantIdentity");
   const categorySelect = document.getElementById("merchantCategorySelect");
+  const secondaryCategoriesSelect = document.getElementById("merchantSecondaryCategoriesSelect");
+  const createCategoryButton = document.getElementById("merchantCreateCategoryButton");
+  const newCategoryNameInput = document.getElementById("merchantNewCategoryName");
   const form = document.getElementById("merchantProductForm");
   const status = document.getElementById("merchantStatus");
   const hiddenId = document.getElementById("merchantProductId");
+  const imageInput = document.getElementById("merchantImageInput");
+  const imageFileInput = document.getElementById("merchantImageFile");
+  const imagePreview = document.getElementById("merchantImagePreview");
+  const imageUploadStatus = document.getElementById("merchantImageUploadStatus");
 
   bindAutoCapitalization([
     form?.elements?.name,
-    form?.elements?.tag
+    form?.elements?.tag,
+    newCategoryNameInput
   ], "title");
   bindAutoCapitalization([form?.elements?.description], "sentence");
 
@@ -3455,6 +3463,79 @@ async function renderMerchantPage() {
         <option value="${category.id}">${escapeHtml(category.name)}</option>
       `).join("")
     : `<option value="">No categories available</option>`;
+  if (secondaryCategoriesSelect) {
+    secondaryCategoriesSelect.innerHTML = catalog.categories.map((category) => `
+      <option value="${escapeHtml(category.name)}">${escapeHtml(category.name)}</option>
+    `).join("");
+  }
+
+  if (createCategoryButton) {
+    createCategoryButton.onclick = async () => {
+      const name = newCategoryNameInput?.value.trim() || "";
+      if (!name) {
+        setStatus(status, "Enter a category name first.", "error");
+        return;
+      }
+      try {
+        const response = await apiFetch(`/merchant/categories?user_id=${encodeURIComponent(user.id)}`, {
+          method: "POST",
+          body: JSON.stringify({ name })
+        });
+        if (newCategoryNameInput) newCategoryNameInput.value = "";
+        setStatus(status, response.message, "success");
+        renderMerchantPage();
+      } catch (error) {
+        setStatus(status, error.message, "error");
+      }
+    };
+  }
+
+  if (imageFileInput) {
+    imageFileInput.onchange = async () => {
+      const file = imageFileInput.files?.[0];
+      if (!file) {
+        if (imageInput) imageInput.value = "";
+        if (imagePreview) {
+          imagePreview.hidden = true;
+          imagePreview.removeAttribute("src");
+        }
+        setStatus(imageUploadStatus, "", "neutral");
+        return;
+      }
+      if (imagePreview) {
+        imagePreview.src = URL.createObjectURL(file);
+        imagePreview.hidden = false;
+      }
+      try {
+        const payload = new FormData();
+        payload.append("image", file);
+        const response = await apiFetch(`/merchant/uploads/product-image?user_id=${encodeURIComponent(user.id)}`, {
+          method: "POST",
+          body: payload
+        });
+        if (imageInput) imageInput.value = response.image;
+        setStatus(imageUploadStatus, response.message, "success");
+      } catch (error) {
+        if (imageInput) imageInput.value = "";
+        setStatus(imageUploadStatus, error.message, "error");
+      }
+    };
+  }
+
+  if (imageInput) {
+    imageInput.oninput = () => {
+      const value = imageInput.value.trim();
+      if (!imagePreview) return;
+      if (!value) {
+        imagePreview.hidden = true;
+        imagePreview.removeAttribute("src");
+        if (imageUploadStatus) setStatus(imageUploadStatus, "", "neutral");
+        return;
+      }
+      imagePreview.src = value;
+      imagePreview.hidden = false;
+    };
+  }
 
   tableNode.innerHTML = catalog.products.length
     ? catalog.products.map((product) => `
@@ -3480,6 +3561,19 @@ async function renderMerchantPage() {
       form.elements.slug.value = product.slug;
       form.elements.category_id.value = product.category.id;
       form.elements.image.value = product.image;
+      if (secondaryCategoriesSelect) {
+        const selectedCategories = new Set(product.secondary_categories || []);
+        Array.from(secondaryCategoriesSelect.options).forEach((option) => {
+          option.selected = selectedCategories.has(option.value);
+        });
+      }
+      if (imagePreview) {
+        imagePreview.src = product.image;
+        imagePreview.hidden = false;
+      }
+      if (imageUploadStatus) {
+        setStatus(imageUploadStatus, "Using the saved product image. Paste a new image path or upload a replacement if needed.", "neutral");
+      }
       form.elements.price.value = product.price;
       form.elements.original_price.value = product.original_price;
       form.elements.stock.value = product.stock;
@@ -3498,6 +3592,9 @@ async function renderMerchantPage() {
     const data = Object.fromEntries(new FormData(form).entries());
     data.featured = form.elements.featured.checked;
     data.deal_of_the_day = form.elements.deal_of_the_day.checked;
+    data.secondary_categories = secondaryCategoriesSelect
+      ? Array.from(secondaryCategoriesSelect.selectedOptions).map((option) => option.value)
+      : [];
 
     try {
       if (hiddenId.value) {
@@ -3515,6 +3612,17 @@ async function renderMerchantPage() {
       }
       form.reset();
       hiddenId.value = "";
+      if (secondaryCategoriesSelect) {
+        Array.from(secondaryCategoriesSelect.options).forEach((option) => {
+          option.selected = false;
+        });
+      }
+      if (imagePreview) {
+        imagePreview.hidden = true;
+        imagePreview.removeAttribute("src");
+      }
+      if (imageFileInput) imageFileInput.value = "";
+      if (imageUploadStatus) setStatus(imageUploadStatus, "", "neutral");
       renderMerchantPage();
     } catch (error) {
       setStatus(status, error.message, "error");
@@ -4068,7 +4176,7 @@ async function renderAdminPage() {
           <article class="admin-row">
             <div>
               <strong>${escapeHtml(product.name)}</strong>
-              <p>Product ID ${product.id} · ${escapeHtml(product.category.name)}${product.secondary_categories?.length ? ` · ${escapeHtml(product.secondary_categories.join(", "))}` : ""} · ${escapeHtml(product.tag)}${product.seller_shop_name ? ` · Seller ${escapeHtml(product.seller_shop_name)}` : ""}</p>
+              <p>Product ID ${product.id} · ${escapeHtml(product.category.name)}${product.secondary_categories?.length ? ` · ${escapeHtml(product.secondary_categories.join(", "))}` : ""} · ${escapeHtml(product.tag)} · ${product.role === "merchant" ? "Merchant listing" : "Owner listing"}${product.seller_shop_name ? ` · Seller ${escapeHtml(product.seller_shop_name)}` : ""}</p>
               <p>${buildStockStatusMarkup(product)}${hasVisibleDiscount(product) ? ` · ${formatPrice(product.price)} from ${formatPrice(product.original_price)}` : ` · ${formatPrice(product.price)}`}</p>
               <p class="admin-rating-row">${renderStars(product.rating)}<strong class="rating-value">${product.rating.toFixed(1)}</strong><span>${product.reviews_count} customer ratings</span></p>
             </div>

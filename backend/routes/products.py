@@ -123,6 +123,19 @@ def _normalize_stock_value(raw_stock) -> int:
     return max(stock, 0)
 
 
+def _store_uploaded_product_image(uploaded_file) -> str:
+    safe_name = secure_filename(uploaded_file.filename)
+    suffix = Path(safe_name).suffix.lower()
+    if suffix not in ALLOWED_PRODUCT_IMAGE_SUFFIXES:
+        raise ValueError("Only PNG, JPG, JPEG, or WEBP files are allowed.")
+
+    PRODUCT_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    final_name = f"product-{secrets.token_hex(8)}{suffix}"
+    target_path = PRODUCT_UPLOAD_DIR / final_name
+    uploaded_file.save(target_path)
+    return f"uploads/products/{final_name}"
+
+
 def _build_bank_offer(category_name: str, index: int) -> dict:
     bank_names = ["HDFC Bank", "ICICI Bank", "Axis Bank", "SBI Cards", "Kotak Bank", "IndusInd Bank"]
     discounts = [10, 12, 15, 8, 5, 7]
@@ -1204,6 +1217,73 @@ def merchant_list_products():
         )
 
 
+@products_bp.post("/merchant/categories")
+def merchant_create_category():
+    payload = request.get_json(silent=True) or {}
+    name = _title_case(payload.get("name", ""))
+    if not name:
+        return jsonify({"message": "Category name is required."}), 400
+
+    slug = _normalized_slug(payload.get("slug") or name)
+    if not slug:
+        return jsonify({"message": "Category slug is required."}), 400
+
+    with session_scope() as session:
+        merchant, error = _require_merchant(session)
+        if error:
+            return error
+        existing = session.query(Category).filter(or_(Category.name == name, Category.slug == slug)).first()
+        if existing:
+            return jsonify({"message": "This category already exists."}), 409
+
+        category = Category(
+            name=name,
+            slug=slug,
+            description=_sentence_case(payload.get("description", "")) or f"{name} products on SwiftCart.",
+            banner_title=_sentence_case(payload.get("banner_title", "")) or f"Explore {name}",
+        )
+        session.add(category)
+        session.flush()
+        return jsonify(
+            {
+                "message": "Category created successfully.",
+                "merchant": serialize_user(merchant),
+                "category": {
+                    "id": category.id,
+                    "name": category.name,
+                    "slug": category.slug,
+                    "description": category.description,
+                    "banner_title": category.banner_title,
+                },
+            }
+        ), 201
+
+
+@products_bp.post("/merchant/uploads/product-image")
+def merchant_upload_product_image():
+    uploaded_file = request.files.get("image")
+    if not uploaded_file or not uploaded_file.filename:
+        return jsonify({"message": "Choose a product image to upload."}), 400
+
+    with session_scope() as session:
+        merchant, error = _require_merchant(session)
+        if error:
+            return error
+
+    try:
+        image_path = _store_uploaded_product_image(uploaded_file)
+    except ValueError as error:
+        return jsonify({"message": str(error)}), 400
+
+    return jsonify(
+        {
+            "message": "Product image uploaded successfully.",
+            "merchant": {"id": merchant.id},
+            "image": image_path,
+        }
+    ), 201
+
+
 @products_bp.post("/merchant/products")
 def merchant_create_product():
     payload = request.get_json(silent=True) or {}
@@ -1229,7 +1309,7 @@ def merchant_create_product():
             return jsonify({"message": str(error)}), 400
 
         product = Product(
-            name=payload["name"].strip(),
+            name=_sentence_case(payload["name"]),
             slug=normalized_slug,
             category_id=int(payload["category_id"]),
             image=payload["image"].strip(),
@@ -1238,12 +1318,12 @@ def merchant_create_product():
             stock=stock,
             rating=float(payload.get("rating", 4.0)),
             reviews_count=int(payload.get("reviews_count", 0)),
-            tag=payload.get("tag", "").strip() or "Merchant Pick",
-            description=payload.get("description", "").strip() or "Merchant listed product.",
-            highlights=payload.get("highlights", "").strip() or "Merchant listing|Fresh product",
+            tag=_sentence_case(payload.get("tag", "")) or "New Arrival",
+            description=_sentence_case(payload.get("description", "")) or "New catalog item.",
+            highlights=_sentence_case(payload.get("highlights", "")) or "Fresh listing|Marketplace product",
             specifications=payload.get("specifications", "").strip() or "Origin=India",
             secondary_categories=_normalize_secondary_categories(payload.get("secondary_categories", "")),
-            delivery_note=payload.get("delivery_note", "").strip() or "Delivery in 2-5 business days",
+            delivery_note=_sentence_case(payload.get("delivery_note", "")) or "Delivery in 2-5 business days",
             featured=bool(payload.get("featured", False)),
             deal_of_the_day=bool(payload.get("deal_of_the_day", False)),
             seller_id=merchant.id,
@@ -1277,18 +1357,21 @@ def merchant_update_product(product_id: int):
 
         for field in ["name", "slug", "image", "tag", "description", "delivery_note"]:
             if field in payload:
-                setattr(product, field, str(payload[field]).strip())
-
-        if "slug" in payload:
-            normalized_slug = _normalized_slug(payload["slug"])
-            existing = (
-                session.query(Product)
-                .filter(Product.slug == normalized_slug, Product.id != product.id)
-                .first()
-            )
-            if existing:
-                return jsonify({"message": "Another product already uses this slug."}), 409
-            product.slug = normalized_slug
+                value = str(payload[field]).strip()
+                if field == "name":
+                    value = _sentence_case(value)
+                elif field == "slug":
+                    value = _normalized_slug(value)
+                    existing = (
+                        session.query(Product)
+                        .filter(Product.slug == value, Product.id != product.id)
+                        .first()
+                    )
+                    if existing:
+                        return jsonify({"message": "Another product already uses this slug."}), 409
+                elif field in {"tag", "description", "delivery_note"}:
+                    value = _sentence_case(value)
+                setattr(product, field, value)
 
         if "category_id" in payload:
             if not _category_exists(session, payload["category_id"]):
@@ -1805,7 +1888,6 @@ def admin_list_products():
         products = (
             session.query(Product)
             .options(joinedload(Product.category), joinedload(Product.seller))
-            .filter(Product.role == "owner")
             .order_by(Product.created_at.desc())
             .all()
         )
@@ -1996,24 +2078,20 @@ def admin_upload_product_image():
     if not uploaded_file or not uploaded_file.filename:
         return jsonify({"message": "Choose a product image to upload."}), 400
 
-    safe_name = secure_filename(uploaded_file.filename)
-    suffix = Path(safe_name).suffix.lower()
-    if suffix not in ALLOWED_PRODUCT_IMAGE_SUFFIXES:
-        return jsonify({"message": "Only PNG, JPG, JPEG, or WEBP files are allowed."}), 400
-
     with session_scope() as session:
         owner, error = _require_owner(session)
         if error:
             return error
 
-    PRODUCT_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    final_name = f"product-{secrets.token_hex(8)}{suffix}"
-    target_path = PRODUCT_UPLOAD_DIR / final_name
-    uploaded_file.save(target_path)
+    try:
+        image_path = _store_uploaded_product_image(uploaded_file)
+    except ValueError as error:
+        return jsonify({"message": str(error)}), 400
+
     return jsonify(
         {
             "message": "Product image uploaded successfully.",
-            "image": f"uploads/products/{final_name}",
+            "image": image_path,
         }
     ), 201
 
@@ -2081,7 +2159,7 @@ def admin_update_product(product_id: int):
         owner, error = _require_owner(session)
         if error:
             return error
-        product = session.query(Product).filter(Product.id == product_id, Product.role == "owner").first()
+        product = session.query(Product).filter(Product.id == product_id).first()
         if not product:
             return jsonify({"message": "Product not found."}), 404
 
@@ -2152,7 +2230,7 @@ def admin_delete_product(product_id: int):
         owner, error = _require_owner(session)
         if error:
             return error
-        product = session.query(Product).filter(Product.id == product_id, Product.role == "owner").first()
+        product = session.query(Product).filter(Product.id == product_id).first()
         if not product:
             return jsonify({"message": "Product not found."}), 404
 

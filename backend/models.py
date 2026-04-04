@@ -215,6 +215,16 @@ def verify_password(stored_hash: str | None, password: str) -> bool:
             return False
     return check_password_hash(stored_value, raw_password)
 
+
+def preserve_seeded_password(user: User, seeded_password: str) -> None:
+    stored_value = str(getattr(user, "password_hash", "") or "").strip()
+    if ROTATE_SEEDED_PASSWORDS or not stored_value:
+        user.password_hash = hash_password(seeded_password)
+        user.password_changed_at = datetime.utcnow()
+        return
+    if not user.password_changed_at:
+        user.password_changed_at = user.created_at or datetime.utcnow()
+
 SQLALCHEMY_ENGINE_KWARGS = {
     "future": True,
     "pool_pre_ping": True,
@@ -1556,9 +1566,7 @@ def seed_data() -> None:
         else:
             demo_user.email = BUYER_DEMO_EMAIL
             demo_user.account_type = "buyer"
-            if ROTATE_SEEDED_PASSWORDS or not verify_password(demo_user.password_hash, BUYER_DEMO_PASSWORD):
-                demo_user.password_hash = hash_password(BUYER_DEMO_PASSWORD)
-                demo_user.password_changed_at = datetime.utcnow()
+            preserve_seeded_password(demo_user, BUYER_DEMO_PASSWORD)
 
         if demo_user and not demo_user.addresses:
             session.add(
@@ -1629,18 +1637,10 @@ def ensure_owner_account() -> None:
             .first()
         )
         if owner:
-            previous_role = str(owner.account_type or "").strip().lower()
-            previous_email = owner.email.strip().lower()
             owner.account_type = "owner"
-            should_rotate_password = False
-            if previous_email != OWNER_EMAIL.lower():
+            if owner.email.strip().lower() != OWNER_EMAIL.lower():
                 owner.email = OWNER_EMAIL
-                should_rotate_password = True
-            if previous_role != "owner":
-                should_rotate_password = True
-            if should_rotate_password or ROTATE_SEEDED_PASSWORDS or not verify_password(owner.password_hash, OWNER_PASSWORD):
-                owner.password_hash = hash_password(OWNER_PASSWORD)
-                owner.password_changed_at = datetime.utcnow()
+            preserve_seeded_password(owner, OWNER_PASSWORD)
             if not owner.first_name:
                 owner.first_name = "Prince"
             if not owner.last_name:
@@ -1695,9 +1695,7 @@ def ensure_demo_owner_account() -> None:
             owner.gstin = owner.gstin or "29DEMOOWNER0X1Z1"
             if not owner.unique_code:
                 owner.unique_code = generate_unique_code(session)
-            if ROTATE_SEEDED_PASSWORDS or not verify_password(owner.password_hash, DEMO_OWNER_PASSWORD):
-                owner.password_hash = hash_password(DEMO_OWNER_PASSWORD)
-                owner.password_changed_at = datetime.utcnow()
+            preserve_seeded_password(owner, DEMO_OWNER_PASSWORD)
         else:
             owner = User(
                 first_name="Demo",
@@ -1740,9 +1738,7 @@ def ensure_merchant_demo_account() -> None:
             merchant.gstin = merchant.gstin or "29MERCHANT1234X1Z5"
             if not merchant.unique_code:
                 merchant.unique_code = generate_unique_code(session)
-            if ROTATE_SEEDED_PASSWORDS or not verify_password(merchant.password_hash, MERCHANT_DEMO_PASSWORD):
-                merchant.password_hash = hash_password(MERCHANT_DEMO_PASSWORD)
-                merchant.password_changed_at = datetime.utcnow()
+            preserve_seeded_password(merchant, MERCHANT_DEMO_PASSWORD)
         else:
             merchant = User(
                 first_name="Merchant",
