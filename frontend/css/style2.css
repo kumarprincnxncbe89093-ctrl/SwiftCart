@@ -1391,6 +1391,28 @@ span{
     background:#eff6ff;
 }
 
+.upload-format-card{
+    display:grid;
+    gap:10px;
+    padding:14px 16px;
+    border:1px solid #dbeafe;
+    border-radius:16px;
+    background:linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%);
+}
+
+.upload-format-card p{
+    color:#1e3a8a;
+    font-weight:700;
+}
+
+.upload-format-list{
+    margin:0;
+    padding-left:18px;
+    color:#334155;
+    display:grid;
+    gap:6px;
+}
+
 .inline-form-actions{
     display:grid;
     grid-template-columns:1fr auto;

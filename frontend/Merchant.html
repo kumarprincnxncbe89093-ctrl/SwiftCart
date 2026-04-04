@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Merchant Dashboard - SwiftCart</title>
   <link rel="icon" type="image/svg+xml" href="images/swiftcart-favicon.svg">
-  <link rel="stylesheet" href="css/style2.css?v=20260404-1825">
-  <link rel="stylesheet" href="css/index.css?v=20260404-1825">
+  <link rel="stylesheet" href="css/style2.css?v=20260404-1915">
+  <link rel="stylesheet" href="css/index.css?v=20260404-1915">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css">
 </head>
 <body data-page="merchant">
@@ -58,9 +58,9 @@
         <p class="status-copy">Hold `Cmd` or `Ctrl` to pick extra categories for the same product.</p>
         <select name="secondary_categories" id="merchantSecondaryCategoriesSelect" multiple size="4"></select>
         <div class="admin-upload-stack">
-          <input type="text" name="image" id="merchantImageInput" placeholder="images/your-image.jpg or uploads/products/your-image.webp" required>
+          <input type="hidden" name="image" id="merchantImageInput">
           <input type="file" id="merchantImageFile" accept="image/png,image/jpeg,image/webp">
-          <p class="status-copy">Paste an image path like the owner form, or upload a file to fill this automatically.</p>
+          <p class="status-copy">Choose a product image file. SwiftCart stores the image path automatically and keeps the current image until you upload a replacement.</p>
           <p id="merchantImageUploadStatus" class="status-copy"></p>
         </div>
         <div class="image-link-card">
@@ -99,7 +99,7 @@
 
   <footer class="footer"></footer>
 
-  <script src="js/products.js?v=20260404-1825"></script>
-  <script src="js/app.js?v=20260404-1825"></script>
+  <script src="js/products.js?v=20260404-1915"></script>
+  <script src="js/app.js?v=20260404-1915"></script>
 </body>
 </html>

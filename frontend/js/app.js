@@ -3493,13 +3493,18 @@ async function renderMerchantPage() {
   if (imageFileInput) {
     imageFileInput.onchange = async () => {
       const file = imageFileInput.files?.[0];
+      const currentImage = imageInput?.value.trim() || "";
       if (!file) {
-        if (imageInput) imageInput.value = "";
         if (imagePreview) {
-          imagePreview.hidden = true;
-          imagePreview.removeAttribute("src");
+          if (currentImage) {
+            imagePreview.src = currentImage;
+            imagePreview.hidden = false;
+          } else {
+            imagePreview.hidden = true;
+            imagePreview.removeAttribute("src");
+          }
         }
-        setStatus(imageUploadStatus, "", "neutral");
+        if (imageUploadStatus) setStatus(imageUploadStatus, currentImage ? "Current saved product image kept." : "", "neutral");
         return;
       }
       if (imagePreview) {
@@ -3514,26 +3519,24 @@ async function renderMerchantPage() {
           body: payload
         });
         if (imageInput) imageInput.value = response.image;
+        if (imagePreview) {
+          imagePreview.src = response.image;
+          imagePreview.hidden = false;
+        }
         setStatus(imageUploadStatus, response.message, "success");
       } catch (error) {
-        if (imageInput) imageInput.value = "";
+        if (imageInput) imageInput.value = currentImage;
+        if (imagePreview) {
+          if (currentImage) {
+            imagePreview.src = currentImage;
+            imagePreview.hidden = false;
+          } else {
+            imagePreview.hidden = true;
+            imagePreview.removeAttribute("src");
+          }
+        }
         setStatus(imageUploadStatus, error.message, "error");
       }
-    };
-  }
-
-  if (imageInput) {
-    imageInput.oninput = () => {
-      const value = imageInput.value.trim();
-      if (!imagePreview) return;
-      if (!value) {
-        imagePreview.hidden = true;
-        imagePreview.removeAttribute("src");
-        if (imageUploadStatus) setStatus(imageUploadStatus, "", "neutral");
-        return;
-      }
-      imagePreview.src = value;
-      imagePreview.hidden = false;
     };
   }
 
@@ -3572,7 +3575,7 @@ async function renderMerchantPage() {
         imagePreview.hidden = false;
       }
       if (imageUploadStatus) {
-        setStatus(imageUploadStatus, "Using the saved product image. Paste a new image path or upload a replacement if needed.", "neutral");
+        setStatus(imageUploadStatus, "Using the saved product image. Upload a replacement if needed.", "neutral");
       }
       form.elements.price.value = product.price;
       form.elements.original_price.value = product.original_price;
@@ -3595,6 +3598,10 @@ async function renderMerchantPage() {
     data.secondary_categories = secondaryCategoriesSelect
       ? Array.from(secondaryCategoriesSelect.selectedOptions).map((option) => option.value)
       : [];
+    if (!String(data.image || "").trim()) {
+      setStatus(status, "Upload a product image before saving.", "error");
+      return;
+    }
 
     try {
       if (hiddenId.value) {
@@ -4156,13 +4163,18 @@ async function renderAdminPage() {
   if (imageFileInput) {
     imageFileInput.onchange = async () => {
       const file = imageFileInput.files?.[0];
+      const currentImage = imageInput?.value.trim() || "";
       if (!file) {
-        if (imageInput) imageInput.value = "";
         if (imagePreview) {
-          imagePreview.hidden = true;
-          imagePreview.removeAttribute("src");
+          if (currentImage) {
+            imagePreview.src = currentImage;
+            imagePreview.hidden = false;
+          } else {
+            imagePreview.hidden = true;
+            imagePreview.removeAttribute("src");
+          }
         }
-        setStatus(imageUploadStatus, "", "neutral");
+        if (imageUploadStatus) setStatus(imageUploadStatus, currentImage ? "Current saved product image kept." : "", "neutral");
         return;
       }
       if (imagePreview) {
@@ -4177,9 +4189,22 @@ async function renderAdminPage() {
           body: payload
         });
         if (imageInput) imageInput.value = response.image;
+        if (imagePreview) {
+          imagePreview.src = response.image;
+          imagePreview.hidden = false;
+        }
         setStatus(imageUploadStatus, response.message, "success");
       } catch (error) {
-        if (imageInput) imageInput.value = "";
+        if (imageInput) imageInput.value = currentImage;
+        if (imagePreview) {
+          if (currentImage) {
+            imagePreview.src = currentImage;
+            imagePreview.hidden = false;
+          } else {
+            imagePreview.hidden = true;
+            imagePreview.removeAttribute("src");
+          }
+        }
         setStatus(imageUploadStatus, error.message, "error");
       }
     };
@@ -4624,7 +4649,7 @@ async function renderAdminPage() {
         imagePreview.hidden = false;
       }
       if (imageUploadStatus) {
-        setStatus(imageUploadStatus, "Using the saved product image. Paste a new image path or upload a replacement if needed.", "neutral");
+        setStatus(imageUploadStatus, "Using the saved product image. Upload a replacement if needed.", "neutral");
       }
       form.elements.price.value = product.price;
       form.elements.original_price.value = product.original_price;
@@ -4773,21 +4798,6 @@ async function renderAdminPage() {
   bindDisclosureButton("adminChatsDisclosure", "adminChatsPanel", "chats");
   bindDisclosureButton("adminDatabaseDisclosure", "adminDatabasePanel", "database");
 
-  if (imageInput) {
-    imageInput.oninput = () => {
-      const value = imageInput.value.trim();
-      if (!imagePreview) return;
-      if (!value) {
-        imagePreview.hidden = true;
-        imagePreview.removeAttribute("src");
-        if (imageUploadStatus) setStatus(imageUploadStatus, "", "neutral");
-        return;
-      }
-      imagePreview.src = value;
-      imagePreview.hidden = false;
-    };
-  }
-
   form.onsubmit = async (event) => {
     event.preventDefault();
     const data = Object.fromEntries(new FormData(form).entries());
@@ -4796,6 +4806,10 @@ async function renderAdminPage() {
     data.secondary_categories = secondaryCategoriesSelect
       ? Array.from(secondaryCategoriesSelect.selectedOptions).map((option) => option.value)
       : [];
+    if (!String(data.image || "").trim()) {
+      setStatus(status, "Upload a product image before saving.", "error");
+      return;
+    }
 
     try {
       if (hiddenId.value) {
