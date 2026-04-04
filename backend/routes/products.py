@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 import secrets
 from pathlib import Path
 import sqlite3
+import tempfile
 
 from flask import Blueprint, jsonify, request
 from sqlalchemy import and_, inspect, or_, text
@@ -24,6 +25,7 @@ from backend.models import (
     UserChangeLog,
     WishlistItem,
     engine,
+    ensure_historical_change_logs,
     ensure_owner_account,
     seed_data,
     serialize_order,
@@ -31,12 +33,14 @@ from backend.models import (
     serialize_user,
     session_scope,
 )
+from backend.restore_from_sqlite import restore_from_sqlite
 
 
 products_bp = Blueprint("products", __name__)
 PRODUCT_UPLOAD_DIR = BASE_DIR.parent / "frontend" / "uploads" / "products"
 ALLOWED_PRODUCT_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
 DATABASE_BACKUP_DIR = BASE_DIR / "database_backups"
+ALLOWED_DATABASE_RESTORE_SUFFIXES = {".db", ".sqlite", ".sqlite3", ".bak"}
 ADMIN_DB_QUERY_MAX_ROWS = 200
 ADMIN_DB_READ_ONLY_PRAGMAS = {
     "compile_options",
@@ -350,6 +354,51 @@ def _backup_sqlite_database(connection) -> dict:
         "path": str(backup_path),
         "size_bytes": stats.st_size,
         "created_at": datetime.fromtimestamp(stats.st_mtime).isoformat(),
+    }
+
+
+def _validate_database_restore_filename(filename: str) -> tuple[str, str]:
+    safe_name = secure_filename(filename or "")
+    suffix = Path(safe_name).suffix.lower()
+    if not safe_name or suffix not in ALLOWED_DATABASE_RESTORE_SUFFIXES:
+        raise ValueError("Choose a SQLite backup ending in .db, .sqlite, .sqlite3, or .bak.")
+    return safe_name, suffix
+
+
+def _load_database_restore_source():
+    form_payload = request.form if request.form else {}
+    json_payload = request.get_json(silent=True) or {}
+    requested_backup_name = str(form_payload.get("backup_name") or json_payload.get("backup_name") or "").strip()
+
+    if requested_backup_name:
+        safe_name, _suffix = _validate_database_restore_filename(requested_backup_name)
+        backup_dir = DATABASE_BACKUP_DIR.resolve()
+        source_path = (backup_dir / safe_name).resolve()
+        if source_path.parent != backup_dir or not source_path.exists() or not source_path.is_file():
+            raise FileNotFoundError("The selected backup file was not found on the server.")
+        return source_path, None, safe_name
+
+    uploaded_file = request.files.get("database") or request.files.get("file")
+    if not uploaded_file or not uploaded_file.filename:
+        raise ValueError("Choose a SQLite backup file to restore first.")
+
+    safe_name, suffix = _validate_database_restore_filename(uploaded_file.filename)
+    with tempfile.NamedTemporaryFile(
+        delete=False,
+        prefix="swiftcart-restore-",
+        suffix=suffix,
+        dir=tempfile.gettempdir(),
+    ) as temp_file:
+        uploaded_file.save(temp_file.name)
+        return Path(temp_file.name), Path(temp_file.name), safe_name
+
+
+def _database_restore_snapshot(session) -> dict:
+    return {
+        "current_users": session.query(User).count(),
+        "current_orders": session.query(Order).count(),
+        "current_products": session.query(Product).count(),
+        "current_change_logs": session.query(UserChangeLog).count(),
     }
 
 
@@ -1899,6 +1948,71 @@ def admin_database_maintenance():
 
     result["owner"] = owner_payload
     return jsonify(result)
+
+
+@products_bp.post("/admin/database/restore")
+def admin_database_restore():
+    with session_scope() as session:
+        owner, error = _require_owner(session)
+        if error:
+            return error
+        owner_payload = serialize_user(owner)
+
+    temp_path: Path | None = None
+    try:
+        source_path, temp_file_path, source_name = _load_database_restore_source()
+        temp_path = temp_file_path
+
+        safety_backup = None
+        if engine.dialect.name == "sqlite":
+            with engine.connect() as connection:
+                safety_backup = _backup_sqlite_database(connection)
+
+        summary = restore_from_sqlite(source_path)
+        ensure_historical_change_logs()
+        with session_scope() as session:
+            snapshot = _database_restore_snapshot(session)
+
+        ordered_columns = [
+            "users_created",
+            "addresses_created",
+            "orders_created",
+            "order_items_created",
+            "change_logs_created",
+            "categories_created",
+            "products_created",
+            "orders_skipped_missing_products",
+            "current_users",
+            "current_orders",
+            "current_products",
+            "current_change_logs",
+        ]
+        row = {**summary, **snapshot}
+        result = {
+            "owner": owner_payload,
+            "message": f"Restore completed from {source_name}. Existing data was kept and missing history has been merged in.",
+            "columns": ordered_columns,
+            "rows": [{column: row.get(column, 0) for column in ordered_columns}],
+            "restore_summary": summary,
+            "database_snapshot": snapshot,
+            "source_name": source_name,
+        }
+        if safety_backup:
+            result["safety_backup"] = safety_backup
+        return jsonify(result)
+    except FileNotFoundError as error:
+        return jsonify({"message": str(error)}), 404
+    except (ValueError, RuntimeError, sqlite3.Error) as error:
+        return jsonify({"message": f"Restore failed: {error}"}), 400
+    except DBAPIError as error:
+        raw_message = getattr(error, "orig", error)
+        return jsonify({"message": f"Restore failed: {raw_message}"}), 400
+    finally:
+        if temp_path and temp_path.exists():
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
 
 
 @products_bp.get("/admin/products")

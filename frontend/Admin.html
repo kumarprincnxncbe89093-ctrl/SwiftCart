@@ -344,6 +344,11 @@
           <button class="ghost-button" type="button" data-db-maintenance-action="vacuum">Vacuum</button>
           <button class="ghost-button" type="button" data-db-maintenance-action="backup">Backup DB</button>
         </div>
+        <div class="admin-upload-stack">
+          <input type="file" id="adminDbRestoreFile" accept=".db,.sqlite,.sqlite3,.bak">
+          <button id="adminDbRestoreButton" class="ghost-button" type="button">Restore SQLite Backup</button>
+        </div>
+        <p class="status-copy">Upload an older SwiftCart SQLite backup to merge back users, orders, addresses, and change history without deleting the current live data.</p>
         <p id="adminDbMaintenanceStatus" class="status-copy"></p>
         <div id="adminDbMaintenanceResult" class="db-preview"></div>
         <div class="db-toolbar">
@@ -365,7 +370,7 @@
 
   <footer class="footer"></footer>
 
-  <script src="js/products.js?v=20260404-1825"></script>
-  <script src="js/app.js?v=20260404-1825"></script>
+  <script src="js/products.js?v=20260404-1838"></script>
+  <script src="js/app.js?v=20260404-1838"></script>
 </body>
 </html>

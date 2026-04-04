@@ -3773,6 +3773,8 @@ async function renderAdminPage() {
   const dbPathNode = document.getElementById("adminDatabasePath");
   const dbMaintenanceStatus = document.getElementById("adminDbMaintenanceStatus");
   const dbMaintenanceResult = document.getElementById("adminDbMaintenanceResult");
+  const dbRestoreFileInput = document.getElementById("adminDbRestoreFile");
+  const dbRestoreButton = document.getElementById("adminDbRestoreButton");
   const dbTableSelect = document.getElementById("adminDbTableSelect");
   const dbRefreshButton = document.getElementById("adminDbRefreshButton");
   const dbTableInfo = document.getElementById("adminDbTableInfo");
@@ -3792,6 +3794,20 @@ async function renderAdminPage() {
     document.getElementById("adminDbQuery")?.scrollIntoView({ behavior: "smooth", block: "center" });
     dbQueryInput?.focus();
   };
+
+  if (state.adminDbRestoreFlash) {
+    setStatus(
+      dbMaintenanceStatus,
+      state.adminDbRestoreFlash.message || "Database restore completed.",
+      state.adminDbRestoreFlash.tone || "success"
+    );
+    renderDatabaseTable(
+      dbMaintenanceResult,
+      state.adminDbRestoreFlash.columns || [],
+      state.adminDbRestoreFlash.rows || []
+    );
+    state.adminDbRestoreFlash = null;
+  }
 
   if (statsNode) {
     statsNode.innerHTML = Object.entries(dashboard.totals).map(([label, value]) => `
@@ -4499,6 +4515,55 @@ async function renderAdminPage() {
       }
     };
   });
+
+  if (dbRestoreButton) {
+    dbRestoreButton.onclick = async () => {
+      const file = dbRestoreFileInput?.files?.[0];
+      if (!file) {
+        setStatus(dbMaintenanceStatus, "Choose a SQLite backup file first.", "error");
+        renderDatabaseTable(dbMaintenanceResult, [], []);
+        return;
+      }
+
+      const confirmed = window.confirm(
+        `Restore ${file.name}? This will merge older users, orders, addresses, and change history into the current database without deleting existing rows.`
+      );
+      if (!confirmed) {
+        setStatus(dbMaintenanceStatus, "Restore cancelled before upload.", "neutral");
+        return;
+      }
+
+      const originalLabel = dbRestoreButton.textContent;
+      dbRestoreButton.disabled = true;
+      dbRestoreButton.textContent = "Restoring...";
+      setStatus(dbMaintenanceStatus, `Restoring ${file.name}...`, "neutral");
+      renderDatabaseTable(dbMaintenanceResult, [], []);
+
+      try {
+        const payload = new FormData();
+        payload.append("database", file);
+        const result = await apiFetch(`/admin/database/restore${buildOwnerQuery(user)}`, {
+          method: "POST",
+          body: payload
+        });
+        const safetyBackupNote = result.safety_backup?.name ? ` Safety backup created: ${result.safety_backup.name}.` : "";
+        state.adminDbRestoreFlash = {
+          message: `${result.message || "Restore completed."}${safetyBackupNote}`,
+          tone: "success",
+          columns: result.columns || [],
+          rows: result.rows || []
+        };
+        if (dbRestoreFileInput) dbRestoreFileInput.value = "";
+        await renderAdminPage();
+      } catch (error) {
+        setStatus(dbMaintenanceStatus, error.message, "error");
+        renderDatabaseTable(dbMaintenanceResult, [], []);
+      } finally {
+        dbRestoreButton.disabled = false;
+        dbRestoreButton.textContent = originalLabel;
+      }
+    };
+  }
 
   if (dbRefreshButton) dbRefreshButton.onclick = loadOwnerDatabaseTable;
   if (dbTableSelect) dbTableSelect.onchange = loadOwnerDatabaseTable;
