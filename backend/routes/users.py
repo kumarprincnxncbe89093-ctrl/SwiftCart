@@ -716,6 +716,14 @@ def register():
         )
         session.add(user)
         session.flush()
+        log_user_change(
+            session,
+            user_id=user.id,
+            field_name="account_created",
+            old_value="",
+            new_value=f"{user.account_type} account created",
+            changed_by="signup",
+        )
 
         address = Address(
             user_id=user.id,

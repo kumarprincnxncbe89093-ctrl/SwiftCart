@@ -123,6 +123,14 @@ def _normalize_stock_value(raw_stock) -> int:
     return max(stock, 0)
 
 
+def _safe_datetime(value):
+    return value if isinstance(value, datetime) else None
+
+
+def _safe_lower_status(value) -> str:
+    return str(value or "").strip().lower()
+
+
 def _store_uploaded_product_image(uploaded_file) -> str:
     safe_name = secure_filename(uploaded_file.filename)
     suffix = Path(safe_name).suffix.lower()
@@ -1477,17 +1485,21 @@ def admin_dashboard():
         now = datetime.utcnow()
         seven_days_ago = now - timedelta(days=7)
         thirty_days_ago = now - timedelta(days=30)
-        users_last_7 = [user for user in all_user_rows if user.created_at >= seven_days_ago]
-        users_last_30 = [user for user in all_user_rows if user.created_at >= thirty_days_ago]
-        orders_last_7 = [order for order in revenue if order.created_at >= seven_days_ago]
-        orders_last_30 = [order for order in revenue if order.created_at >= thirty_days_ago]
-        cancelled_orders = [order for order in revenue if order.status.lower() == "cancelled"]
+        users_last_7 = [user for user in all_user_rows if (_safe_datetime(user.created_at) or datetime.min) >= seven_days_ago]
+        users_last_30 = [user for user in all_user_rows if (_safe_datetime(user.created_at) or datetime.min) >= thirty_days_ago]
+        orders_last_7 = [order for order in revenue if (_safe_datetime(order.created_at) or datetime.min) >= seven_days_ago]
+        orders_last_30 = [order for order in revenue if (_safe_datetime(order.created_at) or datetime.min) >= thirty_days_ago]
+        cancelled_orders = [order for order in revenue if _safe_lower_status(order.status) == "cancelled"]
 
         order_activity = []
         for day_offset in range(6, -1, -1):
             day_start = (now - timedelta(days=day_offset)).replace(hour=0, minute=0, second=0, microsecond=0)
             day_end = day_start + timedelta(days=1)
-            bucket = [order for order in revenue if day_start <= order.created_at < day_end]
+            bucket = [
+                order
+                for order in revenue
+                if (created_at := _safe_datetime(order.created_at)) and day_start <= created_at < day_end
+            ]
             order_activity.append(
                 {
                     "date": day_start.date().isoformat(),
@@ -1499,7 +1511,11 @@ def admin_dashboard():
 
         hourly_activity = []
         for hour in range(24):
-            bucket = [order for order in revenue if order.created_at.hour == hour]
+            bucket = [
+                order
+                for order in revenue
+                if (created_at := _safe_datetime(order.created_at)) and created_at.hour == hour
+            ]
             hourly_activity.append(
                 {
                     "hour": f"{hour:02d}:00",
@@ -1513,7 +1529,11 @@ def admin_dashboard():
         for day_offset in range(13, -1, -1):
             day_start = (now - timedelta(days=day_offset)).replace(hour=0, minute=0, second=0, microsecond=0)
             day_end = day_start + timedelta(days=1)
-            bucket = [order for order in revenue if day_start <= order.created_at < day_end]
+            bucket = [
+                order
+                for order in revenue
+                if (created_at := _safe_datetime(order.created_at)) and day_start <= created_at < day_end
+            ]
             finance_series.append(
                 {
                     "date": day_start.date().isoformat(),
@@ -1528,7 +1548,11 @@ def admin_dashboard():
                     "value": len(bucket),
                 }
             )
-            cancelled_bucket = [order for order in cancelled_orders if order.canceled_at and day_start <= order.canceled_at < day_end]
+            cancelled_bucket = [
+                order
+                for order in cancelled_orders
+                if (canceled_at := _safe_datetime(order.canceled_at)) and day_start <= canceled_at < day_end
+            ]
             cancelled_series.append(
                 {
                     "date": day_start.date().isoformat(),
@@ -1570,7 +1594,7 @@ def admin_dashboard():
                     continue
                 category_performance_map[category_id]["ordered_units"] += item.quantity
                 category_performance_map[category_id]["revenue"] += item.quantity * item.unit_price
-                if order.status.lower() == "cancelled":
+                if _safe_lower_status(order.status) == "cancelled":
                     category_performance_map[category_id]["cancelled_units"] += item.quantity
         category_performance = sorted(
             category_performance_map.values(),
@@ -1596,7 +1620,7 @@ def admin_dashboard():
                 "intent": chat.intent,
                 "page": chat.page,
                 "message": chat.message,
-                "created_at": chat.created_at.isoformat(),
+                "created_at": chat.created_at.isoformat() if chat.created_at else None,
                 "user": (
                     {
                         "id": chat.user.id,
@@ -1689,7 +1713,7 @@ def admin_dashboard():
                         "title": review.title,
                         "comment": review.comment,
                         "image": review.image,
-                        "created_at": review.created_at.isoformat(),
+                        "created_at": review.created_at.isoformat() if review.created_at else None,
                     }
                     for review in all_reviews
                 ],
@@ -1702,7 +1726,7 @@ def admin_dashboard():
                         "old_value": log.old_value,
                         "new_value": log.new_value,
                         "changed_by": log.changed_by,
-                        "created_at": log.created_at.isoformat(),
+                        "created_at": log.created_at.isoformat() if log.created_at else None,
                         "user": {
                             "id": log.user.id,
                             "full_name": f"{log.user.first_name} {log.user.last_name}".strip(),

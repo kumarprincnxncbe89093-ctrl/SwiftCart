@@ -514,6 +514,10 @@ def session_scope():
         session.close()
 
 
+def _isoformat_or_none(value: datetime | None) -> str | None:
+    return value.isoformat() if value else None
+
+
 def serialize_product(product: Product) -> dict:
     category = getattr(product, "category", None)
     stock_value = max(int(product.stock or 0), 0)
@@ -550,8 +554,8 @@ def serialize_product(product: Product) -> dict:
         "delivery_note": product.delivery_note,
         "featured": product.featured,
         "deal_of_the_day": product.deal_of_the_day,
-        "created_at": product.created_at.isoformat(),
-        "updated_at": product.updated_at.isoformat(),
+        "created_at": _isoformat_or_none(getattr(product, "created_at", None)),
+        "updated_at": _isoformat_or_none(getattr(product, "updated_at", None)),
         "user_id": product.seller_id,
         "seller_id": product.seller_id,
         "role": product_role,
@@ -590,9 +594,9 @@ def serialize_user(user: User) -> dict:
         "shop_name": user.shop_name,
         "gstin": user.gstin,
         "profile_image": user.profile_image,
-        "created_at": user.created_at.isoformat(),
-        "password_changed_at": user.password_changed_at.isoformat() if user.password_changed_at else None,
-        "last_login_at": user.last_login_at.isoformat() if user.last_login_at else None,
+        "created_at": _isoformat_or_none(getattr(user, "created_at", None)),
+        "password_changed_at": _isoformat_or_none(user.password_changed_at),
+        "last_login_at": _isoformat_or_none(user.last_login_at),
         "last_login_device": user.last_login_device,
         "last_login_browser": user.last_login_browser,
         "last_login_platform": user.last_login_platform,
@@ -600,7 +604,7 @@ def serialize_user(user: User) -> dict:
         "last_login_method": user.last_login_method,
         "is_banned": bool(user.is_banned),
         "ban_reason": user.ban_reason,
-        "banned_at": user.banned_at.isoformat() if user.banned_at else None,
+        "banned_at": _isoformat_or_none(user.banned_at),
         "banned_by_user_id": user.banned_by_user_id,
         "account_status": "Banned" if user.is_banned else "Active",
         "password_history_count": len(get_password_history(user)),
@@ -631,6 +635,7 @@ def serialize_order(order: Order) -> dict:
     effective_status = _resolve_order_status(order, tracking["current_status"])
     order_status = str(order.status or "Placed")
     customer = getattr(order, "user", None)
+    created_at = getattr(order, "created_at", None)
     return {
         "id": order.id,
         "status": effective_status,
@@ -639,10 +644,10 @@ def serialize_order(order: Order) -> dict:
         "payment_method": order.payment_method,
         "shipping_address": order.shipping_address,
         "cancel_reason": order.cancel_reason,
-        "canceled_at": order.canceled_at.isoformat() if order.canceled_at else None,
-        "created_at": order.created_at.isoformat(),
-        "created_date": order.created_at.strftime("%d %b %Y"),
-        "created_time": order.created_at.strftime("%I:%M %p"),
+        "canceled_at": _isoformat_or_none(order.canceled_at),
+        "created_at": _isoformat_or_none(created_at),
+        "created_date": created_at.strftime("%d %b %Y") if created_at else "Unknown date",
+        "created_time": created_at.strftime("%I:%M %p") if created_at else "Unknown time",
         "customer": {
             "id": customer.id if customer else order.user_id,
             "full_name": f"{customer.first_name} {customer.last_name}".strip() if customer else "Removed customer account",
@@ -661,10 +666,10 @@ def serialize_order(order: Order) -> dict:
                 "image": item.product.image if item.product and item.product.image else "images/swift.png",
                 "quantity": item.quantity,
                 "unit_price": item.unit_price,
-                "line_total": item.quantity * item.unit_price,
+                "line_total": (item.quantity or 0) * (item.unit_price or 0),
                 "status": item.status or ("Cancelled" if order_status.lower() == "cancelled" else order_status),
                 "cancel_reason": item.cancel_reason,
-                "canceled_at": item.canceled_at.isoformat() if item.canceled_at else None,
+                "canceled_at": _isoformat_or_none(item.canceled_at),
             }
             for item in order.items
         ],
@@ -691,8 +696,9 @@ def _resolve_order_status(order: Order, fallback_status: str) -> str:
 
 def _build_delivery_tracking(order: Order) -> dict:
     order_status = str(order.status or "Placed")
+    created_at = getattr(order, "created_at", None) or getattr(order, "updated_at", None) or datetime.utcnow()
     if order_status.lower() == "cancelled":
-        cancelled_at = order.canceled_at or order.updated_at or order.created_at
+        cancelled_at = order.canceled_at or order.updated_at or created_at
         return {
             "current_status": "Cancelled",
             "current_step": 1,
@@ -701,7 +707,7 @@ def _build_delivery_tracking(order: Order) -> dict:
             "timeline": [
                 {
                     "label": "Order Placed",
-                    "timestamp": order.created_at.isoformat(),
+                    "timestamp": created_at.isoformat(),
                     "completed": True,
                     "active": False,
                 },
@@ -714,7 +720,6 @@ def _build_delivery_tracking(order: Order) -> dict:
             ],
         }
 
-    created_at = order.created_at
     seed = (order.id * 11) + created_at.day + (created_at.month * 3)
     confirm_hours = 1 + (seed % 6)
     packed_days = 1 + (seed % 2)
@@ -767,6 +772,7 @@ def init_db() -> None:
     ensure_owner_account()
     ensure_demo_owner_account()
     ensure_merchant_demo_account()
+    ensure_historical_change_logs()
     if _should_sync_imported_gallery_products_on_startup():
         sync_imported_gallery_products()
     _db_initialized = True
@@ -822,6 +828,56 @@ def log_user_change(session, *, user_id: int, field_name: str, old_value: str | 
             changed_by=changed_by,
         )
     )
+
+
+def ensure_historical_change_logs() -> None:
+    with session_scope() as session:
+        existing_account_user_ids = {
+            user_id
+            for (user_id,) in session.query(UserChangeLog.user_id)
+            .filter(UserChangeLog.field_name == "account_created")
+            .all()
+        }
+        existing_order_signatures = {
+            (log.user_id, log.new_value)
+            for log in session.query(UserChangeLog)
+            .filter(UserChangeLog.field_name == "order_created")
+            .all()
+        }
+
+        for user in session.query(User).order_by(User.created_at.asc(), User.id.asc()).all():
+            if user.id in existing_account_user_ids:
+                continue
+            created_at = user.created_at or datetime.utcnow()
+            session.add(
+                UserChangeLog(
+                    user_id=user.id,
+                    field_name="account_created",
+                    old_value="",
+                    new_value=f"{user.account_type} account created",
+                    changed_by="backfill",
+                    created_at=created_at,
+                    updated_at=created_at,
+                )
+            )
+
+        for order in session.query(Order).order_by(Order.created_at.asc(), Order.id.asc()).all():
+            created_at = order.created_at or datetime.utcnow()
+            message = f"Order #{order.id} placed for {round(float(order.total_amount or 0), 2)}"
+            signature = (order.user_id, message)
+            if signature in existing_order_signatures:
+                continue
+            session.add(
+                UserChangeLog(
+                    user_id=order.user_id,
+                    field_name="order_created",
+                    old_value="",
+                    new_value=message,
+                    changed_by="backfill",
+                    created_at=created_at,
+                    updated_at=created_at,
+                )
+            )
 
 
 def ensure_schema_updates() -> None:

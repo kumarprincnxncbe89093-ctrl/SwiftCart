@@ -145,6 +145,14 @@ def checkout():
         )
         session.add(order)
         session.flush()
+        log_user_change(
+            session,
+            user_id=user.id,
+            field_name="order_created",
+            old_value="",
+            new_value=f"Order #{order.id} placed for {round(order.total_amount, 2)}",
+            changed_by="checkout",
+        )
 
         for product, quantity in order_items:
             product.stock = max(0, int(product.stock or 0) - quantity)
