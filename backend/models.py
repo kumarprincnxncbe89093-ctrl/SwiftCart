@@ -191,6 +191,7 @@ BUYER_DEMO_PASSWORD = (os.getenv("BUYER_DEMO_PASSWORD") or _default_seed_value("
 ENABLE_DEMO_MERCHANT = _env_flag("ENABLE_DEMO_MERCHANT", not IS_PRODUCTION)
 ENABLE_DEMO_LOGINS = _env_flag("ENABLE_DEMO_LOGINS", not IS_PRODUCTION)
 ROTATE_SEEDED_PASSWORDS = _env_flag("ROTATE_SEEDED_PASSWORDS", False)
+ALLOW_SQLITE_IN_PRODUCTION = _env_flag("ALLOW_SQLITE_IN_PRODUCTION", False)
 BCRYPT_ROUNDS = max(_env_int("BCRYPT_ROUNDS", 10), 4)
 
 
@@ -224,6 +225,18 @@ def preserve_seeded_password(user: User, seeded_password: str) -> None:
         return
     if not user.password_changed_at:
         user.password_changed_at = user.created_at or datetime.utcnow()
+
+
+def require_persistent_database_configuration() -> None:
+    if not IS_PRODUCTION or ALLOW_SQLITE_IN_PRODUCTION:
+        return
+    if not DATABASE_URL.startswith("sqlite"):
+        return
+    raise RuntimeError(
+        "Production startup refused because no persistent PostgreSQL database is configured. "
+        "Set DATABASE_URL/DATABASE_PRIVATE_URL/PGHOST... to a real Postgres connection, or "
+        "set ALLOW_SQLITE_IN_PRODUCTION=1 only if you intentionally want non-persistent SQLite storage."
+    )
 
 SQLALCHEMY_ENGINE_KWARGS = {
     "future": True,
@@ -766,6 +779,7 @@ def init_db() -> None:
     if _db_initialized:
         return
 
+    require_persistent_database_configuration()
     Base.metadata.create_all(bind=engine, checkfirst=True)
     ensure_schema_updates()
     seed_data()

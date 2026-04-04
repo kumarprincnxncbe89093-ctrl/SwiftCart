@@ -98,10 +98,17 @@ Notes:
 - Do not keep hardcoded owner or demo passwords in code or Railway variables screenshots.
 - Set `ENABLE_DEMO_LOGINS=0` on Railway so demo-style seeded accounts are not available on public deployments.
 - Keep `ENABLE_DEMO_MERCHANT=0` unless you intentionally want a demo seller account.
+- Production now refuses to silently fall back to SQLite unless you explicitly set `ALLOW_SQLITE_IN_PRODUCTION=1`. This prevents user and order data from disappearing on ephemeral hosts.
 - `SWIFTCART_EXPOSE_OTP_PREVIEW=1` forces OTP preview responses for testing. Localhost and private-network hosting now show OTP previews automatically even if you run with production-like settings.
 - Publish a real support email, business address, and custom domain before asking users to trust the login flow.
 - Set `PUBLIC_SITE_URL` to your real custom domain so public traffic can redirect away from the random Railway hostname.
 - SwiftCart now uses signed auth tokens for protected API routes, so users must log in again after deployment if they had an old local session stored in the browser.
+
+If you have older user/order data in a SQLite file and are moving to PostgreSQL, restore it after configuring the real database:
+
+```bash
+python -m backend.restore_from_sqlite --source backend/database.db
+```
 
 ## 6. Initialize the app once
 

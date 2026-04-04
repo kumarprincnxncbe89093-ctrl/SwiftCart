@@ -9,7 +9,7 @@ from flask import Flask, jsonify, redirect, request, send_from_directory
 from sqlalchemy.exc import DBAPIError, OperationalError
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from backend.models import init_db
+from backend.models import DATABASE_URL, init_db
 from backend.routes.orders import orders_bp
 from backend.routes.products import products_bp
 from backend.routes.users import complete_login_form_submission, users_bp
@@ -238,6 +238,7 @@ def create_app() -> Flask:
             "status": "ok" if is_ready else "degraded",
             "service": "SwiftCart API",
             "database_ready": is_ready,
+            "database_engine": "sqlite" if DATABASE_URL.startswith("sqlite") else "postgresql",
         }
         if not is_ready and app.config.get("DB_INIT_ERROR"):
             payload["database_error"] = app.config["DB_INIT_ERROR"]
@@ -250,6 +251,7 @@ def create_app() -> Flask:
                 "status": "ok",
                 "service": "SwiftCart API",
                 "database_ready": bool(app.config.get("DB_READY")),
+                "database_engine": "sqlite" if DATABASE_URL.startswith("sqlite") else "postgresql",
             }
         ), 200
 
