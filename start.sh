@@ -5,6 +5,9 @@ set -eu
 looks_like_placeholder_database_url() {
   value=$(printf "%s" "${1:-}" | tr '[:upper:]' '[:lower:]')
   case "$value" in
+    '${{'*'}}'| '{{'*'}}' | *reference\ to*database_url* | *reference\ to*postgres* )
+      return 0
+      ;;
     *user*password*host*dbname*)
       return 0
       ;;
@@ -61,9 +64,9 @@ if [ "${FLASK_ENV:-production}" = "production" ] && ! is_truthy "${ALLOW_SQLITE_
   elif [ -n "${PGHOST:-}" ] && [ -n "${PGDATABASE:-}" ]; then
     :
   else
-    echo "[startup] Refusing to boot in production without a persistent Postgres database configuration."
-    echo "[startup] Set DATABASE_URL (or Railway/Render Postgres variables), or ALLOW_SQLITE_IN_PRODUCTION=1 to override."
-    exit 1
+    echo "[startup] Warning: no persistent Postgres database configuration was detected before boot."
+    echo "[startup] Continuing startup so the service can expose health details. Check /api/health for database status."
+    echo "[startup] Configure DATABASE_URL (or Railway/Render Postgres variables), or set ALLOW_SQLITE_IN_PRODUCTION=1 only if you intentionally want SQLite."
   fi
 fi
 
