@@ -7,6 +7,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from flask import Flask, jsonify, redirect, request, send_from_directory
 from sqlalchemy.exc import DBAPIError, OperationalError
+from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from backend.models import DATABASE_URL, init_db
@@ -42,12 +43,13 @@ CONTENT_SECURITY_POLICY = "; ".join(
     ]
 )
 logger = logging.getLogger(__name__)
+MAX_UPLOAD_SIZE_MB = 10
 
 
 def create_app() -> Flask:
     app = Flask(__name__, static_folder=None)
     app.config["JSON_SORT_KEYS"] = False
-    app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
+    app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_SIZE_MB * 1024 * 1024
     app.config["ENV_NAME"] = os.getenv("FLASK_ENV", "production")
     app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "swiftcart-dev-secret")
     app.config["DB_READY"] = False
@@ -286,6 +288,14 @@ def create_app() -> Flask:
         if request.path.startswith("/api"):
             return database_unavailable_response()
         return send_from_directory(FRONTEND_DIR, "index.html")
+
+    @app.errorhandler(RequestEntityTooLarge)
+    def handle_request_too_large(error):
+        logger.warning("Upload rejected because it exceeded the %s MB limit: %s", MAX_UPLOAD_SIZE_MB, error)
+        message = f"Upload failed. Choose a file smaller than {MAX_UPLOAD_SIZE_MB} MB."
+        if request.path.startswith("/api"):
+            return jsonify({"message": message, "max_upload_mb": MAX_UPLOAD_SIZE_MB}), 413
+        return message, 413
 
     def serve_frontend_page(filename: str):
         return send_from_directory(FRONTEND_DIR, filename)

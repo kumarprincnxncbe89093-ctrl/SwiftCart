@@ -1326,6 +1326,7 @@ def merchant_upload_product_image():
         merchant, error = _require_merchant(session)
         if error:
             return error
+        merchant_id = merchant.id
 
     try:
         image_path = _store_uploaded_product_image(uploaded_file)
@@ -1335,7 +1336,7 @@ def merchant_upload_product_image():
     return jsonify(
         {
             "message": "Product image uploaded successfully.",
-            "merchant": {"id": merchant.id},
+            "merchant": {"id": merchant_id},
             "image": image_path,
         }
     ), 201

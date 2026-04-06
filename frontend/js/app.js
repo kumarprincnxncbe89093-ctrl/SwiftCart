@@ -40,6 +40,9 @@ const state = {
   adminExpandedSections: { ...DEFAULT_ADMIN_EXPANDED_SECTIONS }
 };
 const HOME_CACHE_KEY = "swiftcart-home-cache-v1";
+const PRODUCT_IMAGE_MAX_UPLOAD_MB = 10;
+const PRODUCT_IMAGE_MAX_UPLOAD_BYTES = PRODUCT_IMAGE_MAX_UPLOAD_MB * 1024 * 1024;
+const PRODUCT_IMAGE_ALLOWED_EXTENSIONS = /\.(png|jpe?g|webp)$/i;
 
 document.addEventListener("error", (event) => {
   const target = event.target;
@@ -594,6 +597,29 @@ function setImageSourceWithFallback(node, src, fallbackSrc = "images/swift.png")
     node.src = fallbackSrc;
   };
   node.src = src || fallbackSrc;
+}
+
+function setProductImagePreview(node, imagePath = "") {
+  if (!(node instanceof HTMLImageElement)) return;
+  const nextImagePath = String(imagePath || "").trim();
+  if (!nextImagePath) {
+    node.hidden = true;
+    node.removeAttribute("src");
+    return;
+  }
+  node.src = nextImagePath;
+  node.hidden = false;
+}
+
+function validateProductImageFile(file) {
+  if (!file) return "";
+  if (Number(file.size || 0) > PRODUCT_IMAGE_MAX_UPLOAD_BYTES) {
+    return `Choose an image smaller than ${PRODUCT_IMAGE_MAX_UPLOAD_MB} MB.`;
+  }
+  if (!PRODUCT_IMAGE_ALLOWED_EXTENSIONS.test(String(file.name || "").trim())) {
+    return "Only PNG, JPG, JPEG, or WEBP files are allowed.";
+  }
+  return "";
 }
 
 function buildUserAvatarMarkup(user) {
@@ -3495,16 +3521,15 @@ async function renderMerchantPage() {
       const file = imageFileInput.files?.[0];
       const currentImage = imageInput?.value.trim() || "";
       if (!file) {
-        if (imagePreview) {
-          if (currentImage) {
-            imagePreview.src = currentImage;
-            imagePreview.hidden = false;
-          } else {
-            imagePreview.hidden = true;
-            imagePreview.removeAttribute("src");
-          }
-        }
+        setProductImagePreview(imagePreview, currentImage);
         if (imageUploadStatus) setStatus(imageUploadStatus, currentImage ? "Current saved product image kept." : "", "neutral");
+        return;
+      }
+      const validationMessage = validateProductImageFile(file);
+      if (validationMessage) {
+        setProductImagePreview(imagePreview, currentImage);
+        setStatus(imageUploadStatus, validationMessage, "error");
+        imageFileInput.value = "";
         return;
       }
       if (imagePreview) {
@@ -3519,23 +3544,14 @@ async function renderMerchantPage() {
           body: payload
         });
         if (imageInput) imageInput.value = response.image;
-        if (imagePreview) {
-          imagePreview.src = response.image;
-          imagePreview.hidden = false;
-        }
+        setProductImagePreview(imagePreview, response.image);
         setStatus(imageUploadStatus, response.message, "success");
       } catch (error) {
         if (imageInput) imageInput.value = currentImage;
-        if (imagePreview) {
-          if (currentImage) {
-            imagePreview.src = currentImage;
-            imagePreview.hidden = false;
-          } else {
-            imagePreview.hidden = true;
-            imagePreview.removeAttribute("src");
-          }
-        }
+        setProductImagePreview(imagePreview, currentImage);
         setStatus(imageUploadStatus, error.message, "error");
+      } finally {
+        imageFileInput.value = "";
       }
     };
   }
@@ -4165,16 +4181,15 @@ async function renderAdminPage() {
       const file = imageFileInput.files?.[0];
       const currentImage = imageInput?.value.trim() || "";
       if (!file) {
-        if (imagePreview) {
-          if (currentImage) {
-            imagePreview.src = currentImage;
-            imagePreview.hidden = false;
-          } else {
-            imagePreview.hidden = true;
-            imagePreview.removeAttribute("src");
-          }
-        }
+        setProductImagePreview(imagePreview, currentImage);
         if (imageUploadStatus) setStatus(imageUploadStatus, currentImage ? "Current saved product image kept." : "", "neutral");
+        return;
+      }
+      const validationMessage = validateProductImageFile(file);
+      if (validationMessage) {
+        setProductImagePreview(imagePreview, currentImage);
+        setStatus(imageUploadStatus, validationMessage, "error");
+        imageFileInput.value = "";
         return;
       }
       if (imagePreview) {
@@ -4189,23 +4204,14 @@ async function renderAdminPage() {
           body: payload
         });
         if (imageInput) imageInput.value = response.image;
-        if (imagePreview) {
-          imagePreview.src = response.image;
-          imagePreview.hidden = false;
-        }
+        setProductImagePreview(imagePreview, response.image);
         setStatus(imageUploadStatus, response.message, "success");
       } catch (error) {
         if (imageInput) imageInput.value = currentImage;
-        if (imagePreview) {
-          if (currentImage) {
-            imagePreview.src = currentImage;
-            imagePreview.hidden = false;
-          } else {
-            imagePreview.hidden = true;
-            imagePreview.removeAttribute("src");
-          }
-        }
+        setProductImagePreview(imagePreview, currentImage);
         setStatus(imageUploadStatus, error.message, "error");
+      } finally {
+        imageFileInput.value = "";
       }
     };
   }
